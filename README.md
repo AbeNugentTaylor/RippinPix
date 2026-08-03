@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# The Plate Series
 
-## Getting Started
+A booster-pack-opening hero for photography, built for an abe.cool subdomain. Pick a
+pack (Landscape / Portrait / Architecture / Still life), swipe across the crimped
+top of a 3D foil pack, watch the seal tear off and the pack drop away, then eight
+"art cards" deal into a growing, filterable collection grid.
 
-First, run the development server:
+Ported from a design handoff prototype into Next.js (App Router) + TypeScript +
+three.js. See [`src/components/PackScene.tsx`](src/components/PackScene.tsx) for the
+3D tear mechanic and [`src/components/PackOpeningApp.tsx`](src/components/PackOpeningApp.tsx)
+for the app state machine.
+
+## Getting started
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Adding your photographs
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Cards render with a placeholder until a real photo is dropped in. See
+[`public/photos/README.md`](public/photos/README.md) — the short version:
 
-## Learn More
+```
+public/photos/<land|port|arch|still>/<01..10>.jpg
+```
 
-To learn more about Next.js, take a look at the following resources:
+Titles, dates, and print mediums for each plate live in `src/lib/series.ts`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Design
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Colors, type, spacing, and the tear/deal animation timings are intentionally fixed
+— see [`docs/design-handoff.md`](docs/design-handoff.md) for the full spec. Treat
+`globals.css` tokens and the `PackScene.tsx`/`CollectionGrid.tsx` timing constants
+as final unless asked to change the design.
 
-## Deploy on Vercel
+`prefers-reduced-motion: reduce` skips the tear/flight/deal animation and reveals
+cards directly.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploying
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+A server component reads `public/photos/` at build time to build the photo
+manifest, so Next prerenders the page statically — add or swap photos and
+redeploy to pick them up. `netlify.toml` wires up the Netlify Next.js runtime —
+connect the repo in Netlify and point a subdomain (e.g. `cards.abe.cool`) at
+the site.
+
+## Attribution
+
+The booster pack 3D model is "Booster Pack (TCG Pack)" by Hasan Ajami (Sketchfab),
+licensed CC BY 4.0. Credited in the page footer — keep that credit if you redesign
+the footer.

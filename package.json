@@ -9,11 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@types/three": "^0.185.3",
     "next": "16.2.12",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "three": "^0.185.1"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
