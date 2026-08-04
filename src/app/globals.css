@@ -320,6 +320,46 @@ a:hover {
   pointer-events: none;
 }
 
+.stage-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bin-ground);
+  transition: opacity 420ms ease;
+}
+
+.stage-loading-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.stage-loading-tag {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  background: var(--color-process-yellow);
+  padding: 8px 16px;
+  transform: rotate(-1.6deg);
+  box-shadow: var(--shadow-hard-md);
+  animation: loading-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes loading-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 .action-row {
   max-width: 1500px;
   margin: var(--space-3) auto 0;

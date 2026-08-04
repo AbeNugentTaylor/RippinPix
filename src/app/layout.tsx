@@ -15,6 +15,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${sourceSerif.variable} ${permanentMarker.variable}`}>
+      <head>
+        {/* Kick off the biggest fetch (the pack model) alongside JS hydration
+            instead of waiting for the PackScene effect to run. */}
+        <link rel="preload" href="/models/booster_pack_tcg_pack.glb" as="fetch" crossOrigin="anonymous" />
+      </head>
       <body>{children}</body>
     </html>
   );

@@ -21,6 +21,7 @@ export default function PackOpeningApp({ photoManifest }: PackOpeningAppProps) {
   const [currentPack, setCurrentPack] = useState<Pack | null>(null);
   const [openedIds, setOpenedIds] = useState<string[]>([]);
   const [dealBatch, setDealBatch] = useState<DealBatch | null>(null);
+  const [sceneReady, setSceneReady] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
@@ -45,6 +46,8 @@ export default function PackOpeningApp({ photoManifest }: PackOpeningAppProps) {
   };
 
   const onTearStart = () => setPhase("tearing");
+
+  const onReady = () => setSceneReady(true);
 
   const onEnterBin = () => {
     setCurrentPack(null);
@@ -184,7 +187,11 @@ export default function PackOpeningApp({ photoManifest }: PackOpeningAppProps) {
           onTearStart={onTearStart}
           onDeal={onDeal}
           onEnterBin={onEnterBin}
+          onReady={onReady}
         />
+        <div className={`stage-loading${sceneReady ? " stage-loading-hidden" : ""}`} aria-hidden={sceneReady}>
+          <span className="stage-loading-tag">Setting up the bin&hellip;</span>
+        </div>
         {inBin && binEmpty && <span className="bin-empty-stamp">Bin&apos;s empty</span>}
       </section>
 

@@ -90,6 +90,7 @@ interface PackSceneProps {
   onTearStart: () => void;
   onDeal: (pack: Pack, anchor: { x: number; y: number }) => void;
   onEnterBin: () => void;
+  onReady: () => void;
 }
 
 function tween(
@@ -111,7 +112,7 @@ function tween(
 }
 
 const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene(
-  { phase, reducedMotion, shopName, packPrice, onPick, onTearStart, onDeal, onEnterBin },
+  { phase, reducedMotion, shopName, packPrice, onPick, onTearStart, onDeal, onEnterBin, onReady },
   ref
 ) {
   const stageElRef = useRef<HTMLDivElement | null>(null);
@@ -1457,23 +1458,21 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
       const rig = buildTearRig(gltf.scene, scene);
       tearRigRef.current = rig;
 
-      // pre-warm the tear rig's shader programs off-screen: the first pick
-      // used to stall ~1 frame while the textured variant compiled, eating
-      // the lift arc of the fly-out.
-      {
-        const warm = designMats[DESIGNS[0].id];
-        rig.artMats.forEach((m) => {
-          m.map = warm.tex;
-          m.needsUpdate = true;
-        });
-        const wasVisible = rig.root.visible;
-        const wy = rig.root.position.y;
-        rig.root.visible = true;
-        rig.root.position.y = wy - 9999;
-        renderer.render(scene, camera);
-        rig.root.position.y = wy;
-        rig.root.visible = wasVisible;
-      }
+      // Pre-compile every shader program the scene will ever need (bin +
+      // all 32 plain rigs across 18 designs + the tear rig) up front, so no
+      // pick — not just the first one — ever stalls on a shader compile.
+      // The tear rig needs a real texture assigned before compiling, since
+      // going from no map to a map is itself a different shader variant.
+      const warm = designMats[DESIGNS[0].id];
+      rig.artMats.forEach((m) => {
+        m.map = warm.tex;
+        m.needsUpdate = true;
+      });
+      const wasVisible = rig.root.visible;
+      rig.root.visible = true;
+      await renderer.compileAsync(scene, camera);
+      rig.root.visible = wasVisible;
+      if (cancelled) return;
 
       rayRef.current = new THREE.Raycaster();
       el.addEventListener("pointermove", onHover);
@@ -1497,6 +1496,7 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
 
       relayout((el.clientWidth || 900) / (el.clientHeight || 520), true);
 
+      onReady();
       loop();
     }
 
