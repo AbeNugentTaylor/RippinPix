@@ -28,6 +28,7 @@ interface CollectionGridProps {
   isEmpty: boolean;
   haulLabel: string;
   dealBatch: DealBatch | null;
+  onSelectCard: (card: CardT) => void;
 }
 
 export default function CollectionGrid({
@@ -39,6 +40,7 @@ export default function CollectionGrid({
   isEmpty,
   haulLabel,
   dealBatch,
+  onSelectCard,
 }: CollectionGridProps) {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const refs = useRef<Map<string, { outer: HTMLDivElement | null; inner: HTMLDivElement | null }>>(
@@ -127,6 +129,7 @@ export default function CollectionGrid({
             shopName={shopName}
             packPrice={packPrice}
             registerRefs={registerRefs}
+            onSelect={onSelectCard}
           />
         ))}
       </div>

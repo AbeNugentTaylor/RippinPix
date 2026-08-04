@@ -1,0 +1,20 @@
+{
+  "nature/1": {
+    "designId": "nature",
+    "local": 1,
+    "fileName": "01.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\DSC_0300.jpg",
+    "crop": {
+      "x": 50,
+      "y": 45,
+      "zoom": 1
+    },
+    "rarity": "holo",
+    "holo": true,
+    "attributes": [],
+    "title": "Mountain waterfall",
+    "date": "2024",
+    "medium": "Archival pigment print",
+    "updatedAt": "2026-08-04T19:09:13.447Z"
+  }
+}

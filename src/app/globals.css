@@ -58,6 +58,9 @@
   --radius-sm: 1px;
   --radius-md: 2px;
   --radius-lg: 4px;
+  /* real trading cards run ~3mm corners on a 63mm card width; kept as its own
+     token (not radius-lg) since it scales with the card, not general chrome */
+  --card-corner-radius: 9px;
 
   --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
   --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
@@ -549,6 +552,12 @@ a:hover {
   color: var(--color-text);
   box-shadow: var(--shadow-md);
   box-sizing: border-box;
+  border-radius: var(--card-corner-radius);
+  /* No overflow:hidden here: the plain (non-configured) card's tape strip and
+     price tag are deliberately positioned to overhang this box's edges
+     (.plate-card-tape/.plate-card-price-tag below) — clipping would cut them
+     off. The photo itself sits inset within this box's padding for that
+     variant, so it never reaches the rounded corners anyway. */
 }
 
 .plate-card-front {
@@ -660,6 +669,183 @@ a:hover {
   height: 40px;
   border-radius: 50%;
   mix-blend-mode: multiply;
+}
+
+/* Full-art cards — rendered once a photo has been through the /configurator
+   (card.rarity set). Deliberately separate from .plate-card-* above so the
+   generated-placeholder look (documented in docs/design-handoff.md) never
+   changes for cards nobody has configured yet. */
+
+.plate-card--full-art .plate-card-front {
+  padding: 0;
+  overflow: hidden;
+}
+
+.plate-card-photo--full {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--card-corner-radius);
+  background: var(--color-neutral-800);
+}
+
+.card-full-art-scrim {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  padding: 10px 9px 9px;
+  background: linear-gradient(
+    to top,
+    rgba(10, 8, 7, 0.94) 0%,
+    rgba(10, 8, 7, 0.8) 45%,
+    transparent 100%
+  );
+}
+
+.card-full-art-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+}
+
+.card-full-art-caption .plate-card-title {
+  color: var(--color-neutral-100);
+}
+
+.card-full-art-caption .plate-card-meta {
+  color: var(--color-neutral-300);
+}
+
+.card-rarity-badge {
+  align-self: flex-start;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  background: var(--color-neutral-300);
+}
+
+.card-rarity-badge[data-rarity="uncommon"] {
+  background: var(--color-green-chip);
+}
+
+.card-rarity-badge[data-rarity="rare"] {
+  background: var(--color-accent-300);
+}
+
+.card-rarity-badge[data-rarity="holo"] {
+  background: linear-gradient(120deg, #ff90b1, #99e0ff, #b9e36c, #ff90b1);
+  color: #201e1d;
+}
+
+.card-rarity-badge[data-rarity="secret"] {
+  background: linear-gradient(120deg, var(--color-process-yellow), #fff3c4, var(--color-process-yellow));
+  color: #4b1528;
+  box-shadow: var(--shadow-hard-sm);
+}
+
+.card-attr-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.card-attr-chip {
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--color-neutral-100);
+  white-space: nowrap;
+}
+
+/* Pointer-reactive holo sheen — --px/--py are written directly by
+   src/lib/useTiltPointer.ts on pointermove, no React re-render involved. */
+.card-holo-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: color-dodge;
+  background:
+    radial-gradient(circle at var(--px, 50%) var(--py, 35%), rgba(255, 255, 255, 0.85), transparent 60%),
+    repeating-linear-gradient(
+      115deg,
+      #ff004c 0%,
+      #ffe500 12%,
+      #00ff9d 24%,
+      #00c3ff 36%,
+      #a200ff 48%,
+      #ff004c 60%
+    );
+  background-size: 100% 100%, 220% 220%;
+  background-position: center, var(--px, 50%) var(--py, 35%);
+  transition: background-position 150ms ease-out;
+}
+
+.card-holo-sheen[data-rarity="uncommon"] {
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+}
+
+.card-holo-sheen[data-rarity="rare"] {
+  opacity: 0.3;
+}
+
+.card-holo-sheen[data-rarity="secret"] {
+  opacity: 0.72;
+}
+
+/* 3D card container — sized by whoever places it (CardEditor/CardLightbox);
+   the canvas Card3D.tsx mounts fills it via width/height:100%. */
+.card3d-container {
+  position: absolute;
+  inset: 0;
+}
+
+/* Click-to-view lightbox (real site only — the haul grid itself stays flat CSS) */
+.lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 7, 0.82);
+  padding: var(--space-6);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-100);
+  border: 1px solid var(--color-neutral-600);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lightbox-card-frame {
+  position: relative;
+  width: min(80vw, 420px);
+  aspect-ratio: 63 / 88;
+  /* scaled up from --card-corner-radius to match this frame being ~2.4x the
+     grid card's width — a fixed px radius would look proportionally tiny
+     blown up this large */
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
 }
 
 .credits {

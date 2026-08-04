@@ -1,0 +1,359 @@
+/* Local-authoring tool styling — deliberately plain/utilitarian, not part of
+   the public site's design system (docs/design-handoff.md doesn't cover this
+   route because it never ships to the deployed site). */
+
+.cfg-shell {
+  min-height: 100vh;
+  padding: var(--space-6) var(--space-6) var(--space-8);
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.cfg-header {
+  margin-bottom: var(--space-6);
+}
+
+.cfg-header h1 {
+  font-size: 28px;
+  margin-bottom: var(--space-2);
+}
+
+.cfg-header p {
+  max-width: 70ch;
+  color: var(--color-neutral-400);
+  font-size: 14px;
+}
+
+.cfg-header code {
+  color: var(--color-accent-300);
+  font-family: monospace;
+}
+
+.cfg-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(560px, 1fr) 300px;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (max-width: 1200px) {
+  .cfg-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cfg-panel {
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-neutral-700);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+
+.cfg-panel--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: var(--color-neutral-500);
+  text-align: center;
+}
+
+.cfg-panel-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-neutral-400);
+  margin-bottom: var(--space-3);
+}
+
+/* Folder browser */
+
+.cfg-path-form {
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--space-2);
+}
+
+.cfg-path-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-neutral-800);
+  border: 1px solid var(--color-neutral-600);
+  color: var(--color-neutral-100);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.cfg-path-form button {
+  background: var(--color-neutral-800);
+  border: 1px solid var(--color-neutral-600);
+  color: var(--color-neutral-200);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cfg-breadcrumb {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--color-neutral-500);
+  font-size: 11px;
+  word-break: break-all;
+  margin-bottom: var(--space-2);
+  cursor: pointer;
+  padding: 0;
+}
+
+.cfg-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.cfg-file-row {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--color-neutral-200);
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.cfg-file-row:hover {
+  background: var(--color-neutral-800);
+}
+
+.cfg-file-row--dir {
+  font-weight: 600;
+  color: var(--color-accent-300);
+}
+
+.cfg-error {
+  color: var(--color-accent-2-400);
+  font-size: 12px;
+}
+
+.cfg-empty {
+  color: var(--color-neutral-500);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* Card editor */
+
+.cfg-editor-body {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .cfg-editor-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cfg-editor-crop,
+.cfg-editor-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cfg-crop-frame {
+  position: relative;
+  width: 220px;
+  aspect-ratio: 63 / 88;
+  overflow: hidden;
+  border-radius: 11px;
+  border: 1px solid var(--color-neutral-700);
+  cursor: grab;
+  touch-action: none;
+  background: var(--color-neutral-800);
+}
+
+.cfg-crop-frame--dragging {
+  cursor: grabbing;
+}
+
+.cfg-crop-error {
+  position: absolute;
+  inset: auto 0 0 0;
+  margin: 0;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.8);
+  color: var(--color-accent-2-400);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.cfg-preview-frame {
+  position: relative;
+  width: 220px;
+  aspect-ratio: 63 / 88;
+  overflow: hidden;
+  border-radius: 11px; /* matches the real card's corner ratio at this frame's width */
+  box-shadow: var(--shadow-md);
+}
+
+.cfg-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 220px;
+}
+
+.cfg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.cfg-field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.cfg-field input[type="text"],
+.cfg-field input[type="number"],
+.cfg-field select {
+  background: var(--color-neutral-800);
+  border: 1px solid var(--color-neutral-600);
+  color: var(--color-neutral-100);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: var(--font-body);
+}
+
+.cfg-field-label {
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.cfg-warning {
+  color: var(--color-process-yellow);
+  font-size: 12px;
+}
+
+.cfg-attributes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cfg-attr-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+}
+
+.cfg-attr-row input {
+  background: var(--color-neutral-800);
+  border: 1px solid var(--color-neutral-600);
+  color: var(--color-neutral-100);
+  padding: 5px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.cfg-attributes button,
+.cfg-attr-row button {
+  background: var(--color-neutral-800);
+  border: 1px solid var(--color-neutral-600);
+  color: var(--color-neutral-200);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cfg-save-btn {
+  margin-top: var(--space-2);
+  background: var(--color-accent-600);
+  color: var(--color-neutral-100);
+  border: none;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cfg-save-btn:hover {
+  background: var(--color-accent-500);
+}
+
+.cfg-save-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.cfg-message {
+  font-size: 13px;
+  color: var(--color-green-chip);
+}
+
+/* Imported list */
+
+.cfg-imported-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.cfg-imported-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-800);
+}
+
+.cfg-imported-thumb {
+  position: relative;
+  width: 40px;
+  aspect-ratio: 63 / 88;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.cfg-imported-meta {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  color: var(--color-neutral-400);
+  overflow: hidden;
+}
+
+.cfg-imported-meta strong {
+  color: var(--color-neutral-100);
+  font-size: 12px;
+}
+
+.cfg-imported-row button {
+  background: none;
+  border: 1px solid var(--color-neutral-600);
+  color: var(--color-neutral-400);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}

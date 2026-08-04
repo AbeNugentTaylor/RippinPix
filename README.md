@@ -49,6 +49,29 @@ timing constants as final unless asked to change the design.
 reveals cards directly (the pack pull-out/box-slide flight itself is not yet
 covered — see "Known gaps" in the v2 handoff).
 
+## Configurator (local only)
+
+`src/app/configurator` is a local authoring tool for turning real photos into real cards —
+it's not part of the deployed site (both the page and its API routes 404 whenever
+`NODE_ENV === "production"`).
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000/configurator](http://localhost:3000/configurator), browse to a
+folder on your machine (it starts at your Desktop), pick a photo, drag/zoom it into the 63:88
+card frame, choose a rarity (and holo foil), add attributes, and hit **Save card**. Saving:
+
+1. Copies the original photo — full resolution, untouched — into `public/photos/<designId>/<NN>.<ext>`.
+2. Writes an entry into [`src/data/card-configs.json`](src/data/card-configs.json) with the crop,
+   rarity, holo flag, attributes, and any title/date/medium overrides.
+
+The pack-opening site (`/`) reads both automatically: a slot with a saved config renders as a
+full-art holo card with your crop/rarity/attributes; every other slot keeps rendering the
+original generated-placeholder plate. Commit both the new photo and the updated
+`card-configs.json` to hand the cards off.
+
 ## Deploying
 
 A server component reads `public/photos/` at build time to build the photo

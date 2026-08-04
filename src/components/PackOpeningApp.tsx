@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import PackScene, { type PackSceneHandle } from "./PackScene";
 import CollectionGrid, { type DealBatch } from "./CollectionGrid";
+import CardLightbox from "./CardLightbox";
 import { DESIGNS, PACKS, PER_PACK, plateAt } from "@/lib/designs";
-import type { Card, Pack, Phase } from "@/lib/types";
+import { configKey } from "@/lib/card-key";
+import type { Card, CardConfig, Pack, Phase } from "@/lib/types";
 
 const SHOP_NAME = "RippinPix";
 const PACK_PRICE = "Free";
@@ -12,15 +14,17 @@ const TOTAL_PLATES = PACKS.length * PER_PACK;
 
 interface PackOpeningAppProps {
   photoManifest: Record<string, string | null>;
+  cardConfigs: Record<string, CardConfig>;
 }
 
-export default function PackOpeningApp({ photoManifest }: PackOpeningAppProps) {
+export default function PackOpeningApp({ photoManifest, cardConfigs }: PackOpeningAppProps) {
   const [phase, setPhase] = useState<Phase>("bin");
   const [cards, setCards] = useState<Card[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [currentPack, setCurrentPack] = useState<Pack | null>(null);
   const [openedIds, setOpenedIds] = useState<string[]>([]);
   const [dealBatch, setDealBatch] = useState<DealBatch | null>(null);
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [sceneReady, setSceneReady] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -62,6 +66,8 @@ export default function PackOpeningApp({ photoManifest }: PackOpeningAppProps) {
       const idx = plate - 1;
       const rare = i === PER_PACK - 1;
       const slot = `bin-${String(idx + 1).padStart(3, "0")}`;
+      const local = i + 1; // 1-based local plate number within this pack's design
+      const config = cardConfigs[configKey(pack.design.id, pack.from + local)];
       fresh.push({
         key: `${pack.id}-${i}`,
         order: -orderNo,
@@ -72,10 +78,14 @@ export default function PackOpeningApp({ photoManifest }: PackOpeningAppProps) {
         tag: rare ? "#edbb00" : "#7de08a",
         tier: rare ? "Bent corner" : pack.design.name,
         ink: rare ? "var(--color-accent-2-700)" : pack.design.ink,
-        title: info.title,
-        date: info.date,
-        medium: info.medium,
+        title: config?.title ?? info.title,
+        date: config?.date ?? info.date,
+        medium: config?.medium ?? info.medium,
         photoUrl: photoManifest[slot] ?? null,
+        rarity: config?.rarity,
+        holo: config?.holo,
+        attributes: config?.attributes,
+        crop: config?.crop,
       });
     }
     setCards((prev) => [...prev, ...fresh]);
@@ -237,7 +247,10 @@ export default function PackOpeningApp({ photoManifest }: PackOpeningAppProps) {
         isEmpty={isEmpty}
         haulLabel={haulLabel}
         dealBatch={dealBatch}
+        onSelectCard={setSelectedCard}
       />
+
+      <CardLightbox card={selectedCard} onClose={() => setSelectedCard(null)} />
 
       <footer className="credits">
         Booster pack 3D model — &ldquo;Booster Pack (TCG Pack)&rdquo; by Hasan Ajami, via Sketchfab,
