@@ -1,31 +1,53 @@
-export type SeriesId = "land" | "port" | "arch" | "still";
-
 export interface Plate {
   title: string;
   date: string;
   medium: string;
 }
 
-export interface Series {
-  id: SeriesId;
+export interface Design {
+  id: string;
   name: string;
+  packs: number;
+  stock: string;
   foil: string;
   ink: string;
-  dot: string;
-  art: [string, string, string];
+  art: string[];
   sub: string;
-  blurb: string;
-  pool: Plate[];
+  subjects: string[];
+  conds: string[];
+  limited?: boolean;
+  locked?: boolean;
 }
 
-export type Phase = "idle" | "tearing" | "dealing" | "collected";
+export interface Slot {
+  x: number;
+  y: number;
+  z: number;
+  rx: number;
+  ry: number;
+  rz: number;
+}
+
+export interface Pack {
+  id: string;
+  design: Design;
+  designIdx: number;
+  name: string;
+  from: number;
+  price: string;
+  slot: Slot;
+}
+
+export type Phase = "bin" | "idle" | "tearing" | "dealing" | "collected";
 
 export interface Card {
   key: string;
   order: number;
-  seriesId: SeriesId;
+  designId: string;
   slot: string;
   plate: string;
+  tilt: number;
+  tag: string;
   tier: string;
   ink: string;
   title: string;

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { sourceSerif } from "@/lib/font";
+import { permanentMarker, sourceSerif } from "@/lib/font";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "The Plate Series — abe.cool",
+  title: "RippinPix — Discount Bin",
   description:
-    "Sealed photographic art cards. Tear the seal, pull the plates, build the collection.",
+    "Dig through a cardboard bin of sealed photo packs. Pull one, rip it open, build the haul.",
 };
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={sourceSerif.variable}>
+    <html lang="en" className={`${sourceSerif.variable} ${permanentMarker.variable}`}>
       <body>{children}</body>
     </html>
   );

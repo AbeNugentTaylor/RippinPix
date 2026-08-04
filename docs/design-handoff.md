@@ -1,248 +1,375 @@
-# Handoff: Booster-pack opening animation ("The Plate Series")
+# Handoff v2: Booster-pack opening — "Discount bin"
+
+**This replaces the v1 handoff.** If you already implemented v1 (four packs, broadsheet-white
+layout, pack chooser buttons), read *§0 Resync* first — it lists exactly what changed and what
+can stay.
+
+---
+
+## 0. Resync: what changed since v1
+
+| Area | v1 (implemented) | v2 (this bundle) |
+| --- | --- | --- |
+| Pack selection | Four buttons in the left column | A 3D **cardboard discount bin** holding every pack; you click a pack in the bin |
+| Catalogue | 4 categories × 5 packs, hardcoded | **18 categories**, each with its own `packs:` count — one data list drives everything |
+| Pack faces | Broadsheet-style printed label (halftone, rules, "DO NOT BEND") | **Photocopied zine covers**: flat colored stock, hand-drawn wobbly frame, marker title |
+| Page skin | Light paper `#f3f2f2`, quiet editorial | Dark thrift-shop: wood ground `#17110f`, yellow/pink slapped signage, crooked type |
+| Camera | Fixed, pack centered | Camera framed from bin size + row count; responsive re-layout on resize |
+| Tear mechanic | — | **Unchanged.** Clipping-plane tear, launch, drop, card deal all carry over verbatim |
+| Card grid | Unchanged structure | Same grid/flip/stagger; card chrome restyled (tape strip, price tag, tilt) |
+| Progress bar | Track under the stage | Removed — a cyan arrow indicator at the tear line replaces it |
+
+**Practical resync order:** (1) swap the catalogue for the new `DESIGNS` data shape, (2) build the
+bin scene + pack pull-out, (3) restyle page chrome and pack-art texture, (4) leave your tear/deal
+code alone except for the two bug fixes noted in §6.
+
+---
 
 ## Overview
-A standalone hero experience for a photography website. The visitor picks one of four pack
-types, swipes across the crimped top of a 3D foil booster pack, the seal tears off left-to-right
-and flies away, the pack drops out of frame, and eight "art cards" fly out and flip face-up into
-a growing collection grid below. Opening more packs appends to the same collection, newest pack
-on top, filterable by category.
+A standalone hero experience for a photography site. A grubby cardboard box sits on a wood floor,
+stuffed with sealed booster packs — each pack is one photo series. The visitor clicks a pack; the
+box slides back out of the way while the pack lifts out and comes to the front, big. They swipe
+across its crimped top; the seal tears off left-to-right and flies away, the pack drops, and eight
+art cards fly out and flip face-up into a growing collection grid below. Every photograph in the
+run lives in exactly one pack — emptying the bin means seeing the whole catalogue.
 
 ## About the Design Files
-The files in `reference/` are **design references written in HTML** — a working prototype of the
-intended look, motion, and behavior. They are not production code to lift wholesale. The task is
-to **recreate this experience in the target codebase's own environment** (React/Next, Vue, Svelte,
-Astro, plain TS — whatever the site already uses) with its established patterns, then wire the real
-photographs and links. If the site has no framework yet, plain TypeScript + three.js is entirely
-sufficient; nothing here needs a UI framework except the card grid state.
+`reference/` holds **design references written in HTML** — a working prototype of look, motion and
+behavior. Not production code. Recreate the experience in the target codebase's own environment
+(React/Next, Vue, Svelte, Astro, plain TS) using its patterns, then wire real photographs.
 
-`reference/Pack Opening.dc.html` is authored in a proprietary streaming-component format: the
-markup between `<x-dc>…</x-dc>` is the template (holes are `{{ dotted.path }}`), and the
-`class Component extends DCLogic` script is the logic (React class component semantics minus
-`render()`; `renderVals()` returns the values the template interpolates). `reference/support.js`
-is that runtime and is included only so the prototype opens in a browser — **do not port it**.
-Read the file as: template = JSX, `renderVals()` = derived state/handlers.
+`reference/Pack Opening - Discount Bin.dc.html` is authored in a proprietary streaming-component
+format: markup between `<x-dc>…</x-dc>` is the template (holes are `{{ dotted.path }}`), and
+`class Component extends DCLogic` is the logic (React class-component semantics minus `render()`;
+`renderVals()` returns what the template interpolates). Read template = JSX, `renderVals()` =
+derived state + handlers. `reference/support.js` is the prototype runtime — **do not port it**.
+`reference/Pack Opening.dc.html` is the v1 design, kept only for diffing against your current build.
 
 ## Fidelity
-**High fidelity.** Colors, type, spacing, timings, and easings below are final and should be matched.
-The one deliberately unfinished part is content: card titles/dates/media are placeholder copy, and
-the card photographs are drag-and-drop placeholders (`<image-slot>`, prototype-only) that must be
-replaced by real `<img>`/`next/image` elements fed from the site's photo data.
+**High fidelity** for layout, color, type, timings, easings. Content is deliberately unfinished:
+card titles/dates/media are generated placeholder copy, and photographs are drag-and-drop
+placeholders (`<image-slot>`, prototype-only) to be replaced with real `<img>`/`next/image`.
 
-## Screens / Views
+---
 
-There is one page, with three phases of the same layout.
+## 1. The catalogue (the part the client tunes)
 
-### 1. Masthead (always)
-- Max width 1440px, centered, `margin-bottom: 40px`.
-- Thick rule 5px `#201e1d`, then a row, then a 1px rule `#201e1d` (this is the only place rules are
-  allowed — front-page furniture).
-- Row: `display:flex; align-items:baseline; justify-content:space-between; gap:30px; padding:5px 0`.
-  Three items, all 12px, `letter-spacing:.18em`, uppercase:
-  left "THE PLATE SERIES" (weight 600), center "Sealed photographic art cards" (`#605d5d`),
-  right the live count "N CARDS COLLECTED" (`#006786`); empty state "No cards yet".
+One array at the top of the logic drives run size, colors, cover art, and card copy. `packs` is the
+only number anyone needs to touch: 8 photos per pack, so `packs: 3` → 24 photographs in that series.
 
-### 2. Hero (phase: idle → tearing)
-- `display:grid; grid-template-columns: minmax(280px,5fr) minmax(320px,6fr); gap:40px;
-  align-items:center; min-height:62vh`. Max width 1440px.
-- **Left column** (`display:flex; flex-direction:column; gap:20px; max-width:30ch`):
-  - Kicker, 12px uppercase `letter-spacing:.18em`, `#aa0b56`: `Pack No. 01 · Landscape`
-    (pack number zero-padded, then the selected category).
-  - `h1` "Tear the seal." — Source Serif 4 600, `clamp(44px, 5.4vw, 86px)`, `line-height:.96`,
-    `letter-spacing:-.015em`.
-  - Blurb, 19px/1.5, `#444141`, per category: "Eight landscapes, sealed in foil and printed as
-    art cards. Swipe across the crimped top to open the pack."
-  - **Pack chooser** (idle only): label "CHOOSE A PACK" (11px uppercase `.18em`, `#7d7979`) over a
-    wrapping flex row (`gap:10px`) of four buttons. Each button: 14px body font, padding `7px 13px`,
-    `border-radius:2px`, `1px` border, and a 9px round dot in the category's ink.
-    Selected = border in the category dot color, background `#eae7e7`, text `#201e1d`.
-    Unselected = border `#d7d3d3`, transparent background, text `#605d5d`.
-  - **Swipe hint** (idle only): "SWIPE RIGHT ACROSS THE SEAL" 13px uppercase `.16em`, `#006786`,
-    pulsing `opacity .55 → 1` over 2.4s ease-in-out; beside it a 34×12 arrow SVG (1.6px stroke,
-    `#0088b0`) translating 0 → 14px → 0 on a 1.6s `cubic-bezier(.4,0,.2,1)` loop. Below, 13px
-    `#7d7979`: "Or tap the pack — keyboard: focus it and press Enter."
-  - **After opening** (phase collected): 13px uppercase `.16em` `#aa0b56`
-    "PACK 01 OPENED — 8 LANDSCAPE CARDS PULLED", then a primary button "Choose another pack"
-    (design-system `.btn.btn-primary`: solid `#0088b0` fill, paper text, 2px radius; hover
-    `#1186ac`, active `#006786`).
-- **Right column**: the 3D stage — a focusable `div` (`role="button"`, `tabindex="0"`,
-  `touch-action:none`, `cursor:grab`, `outline-offset:6px`), height `clamp(340px, 60vh, 640px)`,
-  full width, holding the WebGL canvas. `transition: opacity 420ms ease` (it dims to .12 while the
-  pack drops away and returns to 1).
-  Under it, centered, width 56% (max 340px): a 2px track `#d7d3d3` with a `#d6006c` fill whose width
-  is the tear progress (`transition: width 90ms linear`), and below it two 11px uppercase `.16em`
-  `#7d7979` labels "Seal" / "Torn".
+```js
+const PER_PACK = 8;
+const DESIGNS = [
+  { id: "leaks", name: "Cheeky light leaks", packs: 2,
+    stock: "#f9a17a",        // zine cover paper
+    foil:  "#8a2f14",        // the pack's plastic tint
+    ink:   "#7a2a12",        // caption ink on that series' cards
+    art: ["Cheeky", "light", "leaks"],   // cover title, one line each
+    sub: "the roll went wrong, nicely",  // cover tagline
+    subjects: [ …10 strings… ],          // card-title generator
+    conds:    [ …8 strings… ] },
+  …
+];
+```
 
-### 3. Collection (below the fold)
-- Heading row: `h2` "The collection" (Source Serif 4 600, `clamp(24px,2.4vw,36px)`,
-  `letter-spacing:-.01em`) + 12px uppercase `.18em` `#7d7979` meta "8 CARDS COLLECTED · 1 PACK OPENED".
-  `gap:30px`, baseline aligned, `margin-bottom:30px`.
-- Empty state: 17px italic `#7d7979` "Nothing pulled yet. Pick a pack above and tear it open."
-- Filter chips (only once cards exist): wrapping flex `gap:10px`, `margin-bottom:30px`.
-  13px, padding `5px 11px`, 2px radius, 1px border. Chips are "All N" plus one per category that has
-  cards ("Landscape 8"). Active chip = filled with the chip tint (`#201e1d` for All, else the category
-  dot color) and `#f8f4f4` text; inactive = border `#bab6b6`, transparent, text `#444141`.
-- Grid: `display:grid; grid-template-columns:repeat(auto-fill, minmax(172px,1fr)); gap:30px 20px`.
-  Cards are appended in draw order but each card carries `order: -packNumber`, so the newest pack
-  renders in the first rows. Filtering hides non-matching cards with `display:none`.
-  (Important: append + CSS `order` rather than prepending the array — prepending makes an
-  index-keyed list reuse existing DOM nodes, which kills the entry animation of new cards.)
+Optional flags: `limited: true` prints a scrawled **LIMITED RUN** banner on the cover;
+`locked: true` prints **KEEP OUT** (currently cosmetic — Portraits is meant to become
+password-gated; not implemented).
 
-### Card (63 × 88 aspect — real trading-card proportions)
-- Outer: `perspective:1400px; aspect-ratio:63/88; will-change:transform,opacity`.
-- Inner: `position:relative; width:100%; height:100%; transform-style:preserve-3d`. This is what flips.
-- **Front face**: `backface-visibility:hidden`, background `#f8f4f4`, `box-shadow:0 3px 10px rgba(45,43,43,.16)`,
-  padding `7px 7px 0`, column flex.
-  - Photo area: `flex:1; min-height:0`, background `#eae7e7`, photograph `object-fit:cover`, no radius,
-    no treatment (the photographs are the point — do not halftone or CMYK them).
-  - Caption block, padding `8px 2px 10px`, `gap:2px`:
-    - 9.5px uppercase `.18em` in the category ink (`#006786` cyan, `#aa0b56` magenta for the press
-      proof): "PLATE 04 · LANDSCAPE" (or "· PRESS PROOF").
-    - Title: Source Serif 4 600, 14px, `line-height:1.15`.
-    - Meta: 11px italic `#605d5d`: "2024 · Gelatin silver print".
-- **Back face**: `backface-visibility:hidden; transform:rotateY(180deg)`, background `#eae7e7`, same shadow,
-  padding 12px, `justify-content:space-between; align-items:center`.
-  - Top and bottom: 8.5px uppercase `.2em` `#605d5d` — series title, and "SEALED".
-  - Center: three 40px circles in cyan `#0088b0`, magenta `#d6006c`, process yellow `#edbb00`,
-    `mix-blend-mode:multiply`, offsets `(0,4) (12,0) (6,13)` in a 54×54 box — a misregistered
-    process-dot rosette.
-  - After a card finishes flipping, the back is set to `visibility:hidden` (keeps html-to-image
-    exports and screenshots faithful; also avoids backface artifacts in some browsers).
+Derived, nothing else to maintain:
 
-## Interactions & Behavior
+```js
+const TOTAL_PACKS  = DESIGNS.reduce((n, d) => n + d.packs, 0);        // 32 in the current draft
+const POOLS        = per-series list of packs*8 plates, title = `${subject}, ${cond}`,
+                     date 2019+((k*5+di)%7), medium cycled from MEDIA[]
+const PLATE_OFFSET = running start index per series → global plate numbers
+const PACKS        = flat list; each { id, design, designIdx, name, from, slot }
+plateAt(pack, i)   → { plate: PLATE_OFFSET[series] + pack.from + i + 1, info }
+```
 
-### 3D scene (three.js r184)
-- Renderer: `antialias:true, alpha:true`, `pixelRatio = min(devicePixelRatio, 2)`,
-  `localClippingEnabled = true`. Sized to the stage element and kept in sync with a `ResizeObserver`.
-- Camera: `PerspectiveCamera(30, w/h, .1, 100)` at `(0, 0, 12.6)`.
-- Lights: ambient `#ffffff` 0.5; directional `#ffffff` 1.7 at `(4,7,9)`; directional `#bfe6f4` 0.7 at
-  `(-7,-3,5)`; directional `#ffffff` 1.1 at `(-3,5,-7)`.
-- Environment: a 256×128 canvas gradient (white → `#dfe7ea` → `#8fa4ad` → `#3d4548`, with one bright
-  patch and one cyan patch) as an `EquirectangularReflectionMapping` texture — this is what makes the
-  foil read as foil.
-- Model: `assets/booster_pack_tcg_pack.glb` (Sketchfab, "Booster Pack (TCG Pack)" by Hasan Ajami,
-  **CC-BY-4.0 — attribution required somewhere on the page or in the site credits**). Two meshes:
-  `Object_4` = the foil body (crimped top, zigzag bottom), and a front plane that takes the pack art.
-  Model bounds after load: x ±2.03, y −3.35…3.27, z −0.09…0.16.
-- Materials (replace the GLB's own): foil = `MeshStandardMaterial({ metalness:.92, roughness:.24,
-  side:DoubleSide, transparent:true })` in the category foil color; pack art = `MeshStandardMaterial
-  ({ map: artTexture, metalness:.05, roughness:.78, side:DoubleSide, transparent:true })`.
-- Pack art texture: a 700×1024 canvas drawn at runtime — paper `#f3f2f2`; a halftone dot field fading
-  from the top (dots in cyan, magenta for the Portrait pack); a 6px/1.5px rule pair with the series
-  title in 26px 600 caps with 6px letter-spacing; three lines of 96px 600 serif ("Eight / land- /
-  scapes"); a 40px italic subtitle in the category ink; a six-spoke registration star target with a
-  26px circle at (560,300); a bottom rule with "DO NOT BEND" in 22px caps. `flipY:true`,
-  `colorSpace: SRGB`. Cache one texture per category.
+Current draft: 18 series, 32 packs, 256 photographs.
+Counts as drafted — leaks 2, objects 3, landscapes 3, flowers 2, wife 2, animals 2, plants 2,
+Austin 2, Weihnachten 1, the boys 2, MKE 2, cars 1, Josie 1, Hong Kong 1, Shanghai 1, Vienna 2,
+European dreams 2, portraits 1.
 
-### The tear (the core mechanic)
-The pack never moves during the tear — **the camera does the tilting** (`root.rotation` follows the
-pointer, ±0.42 rad on Y, ±0.24 on X, plus a slow sine breathe and a 0.07 amplitude bob). This matters
-because clipping planes are world-space.
+In a real build these become CMS/config records; `subjects`/`conds` disappear once real photo
+titles exist.
 
-Three copies of the model are in the scene, each with its own cloned materials and clipping planes:
+---
+
+## 2. Page layout
+
+Dark ground, max width 1500px per section, page padding `var(--space-6) var(--space-8) var(--space-8)`.
+
+Background (on the page wrapper, `min-height:100vh`, `background:#17110f`):
+```
+radial-gradient(ellipse 50% 34% at 10%  6%, rgba(237,187,0,.12),  transparent 68%),
+radial-gradient(ellipse 44% 30% at 90% 14%, rgba(214,0,108,.18), transparent 70%),
+radial-gradient(ellipse 46% 34% at 76% 92%, rgba(56,166,207,.13), transparent 70%),
+repeating-linear-gradient(3deg, rgba(97,60,28,.11) 0 26px, rgba(20,14,12,.13) 26px 54px)
+```
+
+**Masthead** — 9px process-yellow bar `rotate(-.4deg) skewX(-.6deg)`; row with shop name (heading
+700, `clamp(22px,2.4vw,34px)`, uppercase, yellow block, `rotate(-1.4deg)`, `box-shadow:4px 4px 0`
+magenta), centre italic 15px `cash only · no refunds · no regrets`, right a pink count chip
+(12px `.18em` caps, `rotate(-2.4deg)`, yellow tape flake behind it); then a 3px neutral rule
+`rotate(.28deg)`.
+
+**Headline row** — left column max 44ch:
+- bin phase: h1 "Dig through the bin." `clamp(34px,4.4vw,66px)`, `line-height:.92`, uppercase,
+  `rotate(-.6deg)`; 17px/1.45 blurb "N packs in there, M photographs total, every one in exactly
+  one pack. Pull a pack out, rip it open. Empty the bin, you've seen the whole run."
+- idle (pack in hand): h1 "Rip it open."
+- collected: h1 `{pulledLine}` = "Eight <series> in the bag."
+Right column: yellow "Everything Free" sign `rotate(-3.2deg)` with an inverted italic
+"yes really" tag; below it 12px caps bin count.
+
+**Stage** — focusable `div`, `role="application"`, `tabindex="0"`, `touch-action:none`,
+height `clamp(380px, 66vh, 760px)`, full width, holds the WebGL canvas. Cursor: `default` in the
+bin, `pointer` over a hoverable pack, `grab` when a pack is out front.
+When every pack is opened, a double-bordered yellow "Bin's empty" stamp overlays it at 42% height.
+
+**Action row** — "Rather not dig:" · **Just grab me one** (pink block button, `rotate(-1.6deg)`,
+hover yellow, active nudges 2px into its shadow) · italic "or click any pack in the bin — they're
+all Free" · **Put it back** (dashed outline, shown while a pack is out) · **Back to the box**
+(yellow block, shown after opening) · right-aligned "No refund on merchandise" stamp
+`rotate(2.4deg)`.
+
+**The haul** — h2 "The haul" + meta; empty state italic "Nothing yet. The bin's right there.";
+filter chips (All N, then one per series with cards, tinted with that series' `stock`, `tilt`
+±1deg); grid `repeat(auto-fill, minmax(172px,1fr))`, gap `var(--space-6) var(--space-4)`.
+
+### Card (63 × 88)
+Outer `perspective:1400px; aspect-ratio:63/88; order:-packNumber; will-change:transform,opacity`;
+a static `rotate({tilt}deg)` wrapper (±2deg); inner `preserve-3d` flips.
+- Front `#f8f4f4`, `box-shadow: var(--shadow-md)`, padding `7px 7px 0`: photo area `flex:1`,
+  `object-fit:cover`, no treatment (the photographs are the point); caption block 8px/2px/10px —
+  9.5px `.18em` caps in the series ink "No. 014 · Flowers" (or "Bent corner" for the last card of
+  each pack), title Source Serif 4 600 14px/1.15, meta 11px italic "2024 · Gelatin silver print".
+  A yellow tape strip (42×15, `rgba(237,187,0,.5)`, `rotate(-3deg)`) sits at top-left, and a small
+  price tag chip at top-right (`rotate(4deg)`, tint `#edbb00` for the bent-corner card else
+  `#7de08a`).
+- Back `#eae7e7`: shop name / three 40px CMY circles with `mix-blend-mode:multiply` at offsets
+  (0,4) (12,0) (6,13) in a 54×54 box / "Free · as-is". Hidden (`visibility:hidden`) once flipped.
+
+---
+
+## 3. The bin scene (three.js r184)
+
+Renderer `antialias:true, alpha:true`, `pixelRatio min(dpr,2)`, `localClippingEnabled = true`,
+`shadowMap.enabled = true` (PCFSoft). Camera `PerspectiveCamera(34, w/h, .1, 200)` — position is
+computed, see `frameCamera`. Lights: ambient `#ffffff` .55; key `#ffffff` 1.8 at (6,12,11) casting
+shadows (1024² map, ortho ±18); fill `#bfe6f4` .6 at (-9,-2,7); rim `#ffffff` 1.0 at (-4,6,-9).
+Environment = 256×128 canvas gradient (white → `#dfe7ea` → `#8fa4ad` → `#3d4548` + one bright and
+one cyan patch) as `EquirectangularReflectionMapping` — this is what makes the foil read as foil.
+
+**The box** is built from `BoxGeometry` panels: board thickness `0.26`, wall height `4.4`,
+base at `y=-4.05`, four walls at `y=-2.0`. Four flaps hinge at the wall top edge
+(`TOP = -2.0 + WALL/2`) and fold *outward past horizontal*: long flaps `rotation.x = ±1.12`,
+length `min(depth*0.36, 2.5)`; side flaps `rotation.z = ±1.3`, length `min(width*0.17, 2.3)`.
+A `ShadowMaterial` plane (opacity .16) at `y=-4.34` catches the shadow and is parented to the box
+so it can never clip the focal pack. Box group: `rotation.y = -0.035`, `position.y = 0.2`, inside
+an outer "stage" group used for the slide-away.
+
+Cardboard texture: a 2048×256 canvas — kraft base, vertical corrugation stripes every 6px, 34
+blotch gradients, two water rings, 44 scuffs, a soft top lip, bottom shading, one packing-tape
+strip. The outward-facing wall additionally gets **FREE** in 156px Permanent Marker with an ink
+bleed pass, a wobbly double underline, and a stray tick. Face material order for the front wall is
+`[card, card, cardDark, cardDark, sign, cardDark]` (BoxGeometry order +x −x +y −y +z −z).
+
+**Responsive layout** (`ResizeObserver` on the stage):
+```
+cols = aspect < .72 ? 2 : aspect < 1.05 ? 3 : aspect < 1.62 ? 4 : 5
+rows = ceil(TOTAL_PACKS / cols)
+binSize = { width: cols*4.3 + 2.9, depth: rows*1.5 + 3.4 }        // COL_GAP 4.3, ROW_GAP 1.5
+```
+`frameCamera(width, depth, aspect, rows)`: `pitch = min(.86, .3 + rows*.062)` (deeper bins look
+down harder), `vExtent = depth*(.5 + pitch*.55) + 9.5`,
+`dist = max((width/2)/tan(hFov/2), (vExtent/2)/tan(vFov/2)) * 1.03`, camera at
+`(0, dist*pitch/‖(1,pitch)‖ + 1.4, dist/‖(1,pitch)‖)` looking at `(0, -1.3, -depth*0.08)`.
+It also sets `COUNTER.rx = -atan(pitch) * .94` so the focal pack squares up to the camera.
+
+Slot placement, with deterministic jitter `jit(a,b,span)` (hashed sine, ±span):
+```
+x  = (col - (cols-1)/2) * 4.3 + jit(row+salt, col, .7)
+y  = -0.34 + jit(col+salt, row, .12) + row*0.05
+z  = ((rows-1)/2 - row) * 1.5 + jit(row+3, col+salt, .18)
+rx = -0.34 + jit(row+salt, col+5, .06);  ry = jit(row+9, col+salt, .26);  rz = jit(row+salt, col+11, .14)
+```
+On every re-layout the slot *assignment* is reshuffled (Fisher–Yates seeded by
+`salt = round(aspect*7)`) so the bin visibly re-jumbles; each pack tweens to its new slot over
+460ms with a `(n % 5) * 40ms` stagger. First layout snaps without tweening.
+
+**Packs in the bin** are cheap clones ("plain" rigs) sharing one material set per series. Hover is
+raycast against them: `hover` eases toward 1 and lifts the pack `y + hover*0.95`, `z + hover*0.55`,
+`rx + hover*0.07`, `rz - hover*0.05`, plus a slow idle sine bob `sin(t*0.7 + x) * 0.04`.
+
+**One "tear rig"** (three groups with clipping planes — see §5) is reused for whichever pack is out
+front; its foil color and art texture are swapped on pick.
+
+---
+
+## 4. Pulling a pack out
+
+`pickPack(id)`:
+1. Retint the rig (foil color, art texture), reset progress, hide the plain clone, show the rig at
+   the plain pack's world slot (bin-stage offset included).
+2. `flyTo(rig, slot, COUNTER, 620ms)` — position lerps with **a lift-then-travel split**, which is
+   what keeps the pack from clipping through the box wall:
+   ```
+   travel = max(0, (k - 0.3) / 0.7);  e = 1 - (1-travel)³;  ey = 1 - (1-k)²
+   lift   = sin(π * k^0.72) * 4.2
+   pos    = from + (to-from)·e   (y uses ey, plus lift)
+   rot    = from + (to-from)·e
+   ```
+3. `+220ms` → `slideBin(true)`: the box stage tweens 620ms `smoothstep` to
+   `x = width*0.92 + 6`, `z = -depth*0.55 - 3`, `rotation.y = -0.42`, `scale 0.68`.
+4. `+300ms` → `focusPack(rig, true)`: 560ms ease-out-cubic scale-up to `focusScale()`
+   (delayed so the box has cleared before the pack gets big).
+
+`COUNTER` (the front-and-centre pose) is `{ x:0, y:-1.3, z:min(depth*0.38, 3.6), rx:-atan(pitch)*.94 }`.
+
+`focusScale()` estimates from the camera frustum at that distance:
+`max(1.6, min(visH*0.86/6.62, visW*0.36/4.06))`. Then `fitFocus()` corrects it empirically —
+project the pack's `Box3` corners to NDC, recentre vertically (biased ~10px above centre), and
+shrink by the overrun if it exceeds 0.92 NDC vertically / 0.96 horizontally, up to 4 passes.
+Re-run on resize. This is the reliable way to get "as big as fits" across aspect ratios.
+
+`backToBin()` / `showBin()` reverse it: progress 0, `slideBin(false)`, `focusPack(rig,false)`,
+`sendHome()` (flyTo back to the slot, 480ms, then hide the rig and re-show the plain clone), and
+smooth-scroll the stage back into view. `sendHome` guards with a `pickSeq` counter so a pack picked
+mid-flight doesn't get hidden by the previous return.
+
+**Just grab me one** picks a random unopened pack; if the box is currently slid out it first slides
+back (`480ms`) so the pull-out reads from the bin.
+
+---
+
+## 5. The tear (carried over from v1, unchanged)
+
+The pack never moves during the tear — the **rig tilts toward the pointer** (±0.42 rad yaw,
+±0.24 pitch, slow sine breathe, 0.07 bob). Three copies of the model, each with cloned materials
+and world-space clipping planes recomputed every frame as
+`plane.copy(basePlane).applyMatrix4(group.matrixWorld)`:
+
 | Group | Clipping | Role |
 | --- | --- | --- |
-| body | `y < 2.89` | the pack below the tear line |
-| stay | `y > 2.89` and `x > xb` | the part of the seal not yet torn |
-| fly | `y > 2.89` and `x < xb` | the torn strip, which lifts and peels |
+| body | `y < 2.89` | pack below the tear line |
+| stay | `y > 2.89` and `x > xb` | seal not yet torn |
+| fly  | `y > 2.89` and `x < xb` | the torn strip |
 
-`xb = -2.12 + p * 4.38` where `p` is tear progress 0→1. Each frame, every plane is recomputed as
-`plane.copy(basePlane).applyMatrix4(group.matrixWorld)` so the boundaries follow the group's own
-transform (this is what lets the torn strip move without smearing the cut).
-`p` chases its target with `p += (target - p) * 0.22`.
+`xb = -2.12 + p * 4.38`; `p += (target - p) * 0.22`. While tearing, `fly` sits at
+`position(p*.1, p*.42, p*.75)`, `rotation(-p*.6, 0, -p*.16)`.
 
-While tearing, `fly` sits at `position(p*0.1, p*0.42, p*0.75)` and
-`rotation(-p*0.6, 0, -p*0.16)` — the corner peels up toward the viewer.
+**Input**: pointerdown on the stage over the focal pack starts a drag;
+`progress = dx / max(190, stageWidth * .62)`. Release < 0.62 springs back; ≥ 0.62 completes.
+Tap (<6% movement, <320ms) or Enter/Space auto-tears (`k²` over 420ms).
+The v1 progress bar is gone; a cyan (`#62c5ee`) arrow + nick indicator sits at the left end of the
+tear line, angled `-0.35 rad`, pulsing along that diagonal.
 
-**Input**: pointerdown on the stage starts a drag; progress = `dx / max(190, stageWidth * 0.62)`.
-Release below 0.62 springs back to 0; at or above 0.62 it completes. A tap (movement < 6% and under
-320ms) or Enter/Space on the focused stage auto-tears (`p` eased `k²` over 420ms).
-
-**Opening sequence** (timings are the felt rhythm — keep them):
-1. `max(180, (1-p) * 620)` ms — the remaining seal peels to fully torn (ease-out quad).
-2. 680ms — the strip launches: `x: .1→2.7`, `y` an arc (`+2.4k − 2.9k²`), `z: .75→2.95`,
-   `rotation.x −0.6→−3.2`, `rotation.y 0→1.2`, `rotation.z −0.16→−1.06`; opacity fades over the
-   last 45%; then `visible = false`.
-3. +380ms — the pack drops: 620ms ease-out, `y −0.15 → −2.35`, `rotation.z 0→0.16`,
-   `scale 1→0.88`, materials fade out over the last 65%; the stage element dims to opacity .12.
-4. +620ms — cards deal.
+**Opening sequence** (felt rhythm — keep the timings):
+1. `max(180, (1-p)*620)`ms — remaining seal peels (ease-out quad).
+2. 680ms — strip launches: `x .1→2.7`, `y` arc `+2.4k − 2.9k²`, `z .75→2.95`,
+   `rot.x −.6→−3.2`, `rot.y 0→1.2`, `rot.z −.16→−1.06`; opacity fades over the last 45%.
+3. +380ms — pack drops: 620ms ease-out, `y −.15→−2.35`, `rot.z 0→.16`, `scale 1→.88`,
+   materials fade over the last 65%.
+4. +640ms — cards deal.
 
 ### Card deal
-- Capture the pack's anchor point in **page coordinates**: stage center X, 44% down its height, plus
-  `scrollX/scrollY`. Measure each card's center the same way. Viewport coordinates break here: the
-  grid grows and the page scrolls between the two measurements, and the cards then start at their
-  destination (this was a real bug).
-- Each new card starts (no transition) at
-  `translate(dx, dy) scale(.34) rotate((i - (n-1)/2) * 4deg)`, `opacity:0`, inner `rotateY(180deg)` —
-  i.e. small, at the pack, showing its back.
-- Then, per card with an 80ms stagger:
-  - outer: `transform 660ms cubic-bezier(.17,.89,.24,1.03) {80i}ms` to `none`,
-    `opacity 180ms linear {80i}ms` to 1.
-  - inner: `transform 460ms cubic-bezier(.2,.85,.3,1) {80i + 240}ms` to `none` — the flip lands
-    just after the flight.
-  - at `{80i + 760}ms`, hide the back face.
-- 340ms after dealing starts, smooth-scroll so the grid top sits 220px below the viewport top — late
-  enough that the flight is still visible.
-- Phase becomes `collected` at `n * 80 + 1000`ms.
+Anchor in **page coordinates** (stage center X, 44% down its height, + `scrollX/scrollY`); measure
+card centers the same way — viewport coords break because the grid grows and the page scrolls
+between the two measurements. Each card starts (no transition) at
+`translate(dx,dy) scale(.34) rotate((i-(n-1)/2)*6deg)`, `opacity:0`, inner `rotateY(180deg)`. Then
+per card, 80ms stagger: outer `transform 660ms cubic-bezier(.17,.89,.24,1.06) {80i}ms → none`,
+`opacity 180ms linear`; inner `transform 460ms cubic-bezier(.2,.85,.3,1) {80i+240}ms → none`;
+hide the back face at `{80i+760}ms`. 340ms in, smooth-scroll so the grid top sits 220px below the
+viewport top. Phase → `collected` at `n*80 + 1000`ms.
+Cards are **appended** with CSS `order: -packNumber` (prepending reuses DOM nodes and kills the
+entry animation).
 
-### Opening another pack
-Returns to the chooser: reset progress to 0, restore the three groups (visible, opacity 1, scale 1,
-rotation 0), increment the pack number, smooth-scroll to top, and slide the pack up from
-`y = −3.6` to `−0.15` over 620ms ease-out cubic while un-yawing from −0.5 rad.
-The card filter resets to "All" whenever a pack is dealt.
+---
 
-### Accessibility
-The stage is a focusable `role="button"` with an aria-label ("Booster pack — swipe right across the
-top to open") and opens on Enter/Space. Focus ring is the design system's
-`:focus-visible { outline: 2px solid #0088b0; outline-offset: 2px }`. Consider honoring
-`prefers-reduced-motion` by skipping the tear/flight and revealing the cards directly — the prototype
-does not do this yet.
+## 6. Two bug fixes worth copying
 
-## State Management
-- `phase`: `idle | tearing | dealing | collected` — drives which hero copy shows and blocks input.
-- `packNo`: integer, starts at 1; also the CSS `order` of that pack's cards (`-packNo`).
-- `seriesId`: selected pack type; changing it while idle re-tints the foil and swaps the pack-art texture.
-- `cards[]`: appended per pack. Each card: `{ key, order, seriesId, slot, plate, tier, ink, title,
-  date, medium }`. `plate` is the pool index + 1 zero-padded; `tier` is the category name, or
-  "Press proof" for the last card of every pack (magenta ink).
-- `filter`: `all` or a category id.
-- Draw logic: each category has its own pool of 10 plates; a pack takes the next 8 by
-  `(alreadyDrawnInThisCategory + i) % pool.length`, so a second pack of the same category shows
-  different plates before repeating.
-- Non-render refs: the three.js renderer/scene/camera/groups, tear progress `p`, and the pointer
-  drag state. Progress is written straight to the progress-bar element, never through render state —
-  re-rendering the whole grid on pointermove is too expensive.
-- Data to fetch in the real site: the photograph for each plate (and ideally a link to its full
-  gallery entry). Everything else is static config.
+- **First-pull stall.** The tear rig's materials get their first texture on the first pick, which
+  triggers a shader-program compile and eats a frame — the lift arc got skipped only on pull #1.
+  Fix: pre-warm at load (assign any series texture to the rig's art materials, render one frame
+  with the rig parked off-screen), and start every tween's clock on its **first painted frame**
+  rather than at scheduling time, so a hitch can't jump the animation forward.
+- **Interrupted returns.** `sendHome()` captures a `pickSeq` and bails on completion if another
+  pack was picked mid-flight.
 
-## Design Tokens (Broadsheet — `assets/broadsheet-styles.css`, guide in `assets/broadsheet-readme.md`)
-- Ground `#f3f2f2`; surface `#eae9e9`; ink `#201e1d`.
-- Cyan accent `#0088b0` (ramp 100–900: `#e9f8ff #cbeeff #99e0ff #62c5ee #38a6cf #1186ac #006786
-  #004961 #0a303e`) — interactive elements. Body-size text in cyan uses `#006786`.
-- Magenta accent `#d6006c` (ramp: `#fff1f4 #ffdee6 #ffc0d0 #ff90b1 #ff458e #d82071 #aa0b56 #790e3d
-  #4b1528`) — the rarer second spot color.
-- Neutrals: `#f8f4f4 #eae7e7 #d7d3d3 #bab6b6 #9b9797 #7d7979 #605d5d #444141 #2d2b2b`.
-- Process yellow `#edbb00` — print treatments only, never chrome.
-- Type: Source Serif 4 for everything, headings 600, body 400, true italic for emphasis. No sans-serif.
-- Spacing scale: 5, 10, 15, 20, 30, 40px. Radii: 1, 2, 4px. Shadows: `0 1px 2px rgba(45,43,43,.14)`,
-  `0 3px 10px rgba(45,43,43,.16)`, `0 12px 32px rgba(45,43,43,.22)`.
-- Pack foils by category: Landscape `#004961`, Portrait `#790e3d`, Architecture `#0a303e`,
-  Still life `#201e1d`. Category dots/inks: `#0088b0`/`#006786`, `#d6006c`/`#aa0b56`,
-  `#38a6cf`/`#006786`, `#201e1d`/`#444141`.
-- Layout: left-aligned and asymmetric, no boxes or dividers between sections — whitespace does the
-  organizing. The masthead rules and the card faces are the only enclosed shapes.
+---
 
-## Assets
-- `assets/booster_pack_tcg_pack.glb` — the pack model. Sketchfab "Booster Pack (TCG Pack)" by
-  Hasan Ajami, **CC-BY-4.0**; attribution is required.
-- `assets/broadsheet-styles.css`, `assets/broadsheet-readme.md` — the design system's tokens and rules.
-- Fonts: Source Serif 4 (Google Fonts) — ital + weights 400/600/700.
-- three.js r184, loaded in the prototype from `https://esm.sh/three@0.184.0` plus
-  `examples/jsm/loaders/GLTFLoader.js`. In a real build, install `three` and import normally.
-- Photographs: none included. The prototype uses `<image-slot>` placeholders keyed
-  `<categoryId>-<plateIndex>`.
+## 7. Pack cover art (700 × 1024 canvas per series, cached)
 
-## Files
-- `reference/Pack Opening.dc.html` — the whole design: template + logic (three.js scene, tear, deal).
-- `reference/support.js` — prototype runtime only, so the file opens in a browser. Do not port.
-- `reference/image-slot.js` — the drag-and-drop photo placeholder used in the prototype. Replace with
-  real images.
+Photocopied-zine look — flat, clean, deliberately *not* grimy:
+1. Fill with the series' `stock` color.
+2. Hand-drawn frame: two wobbly rounded rectangles (9px and 3px stroke, `#1b1512`), points placed
+   every 60px with ±5px jitter — like a marker line gone round twice. Outer inset 40px, inner 58px.
+3. Masthead: shop name in 30px Permanent Marker at (96,132) `rotate(-.02)`, with a wobbly 4px
+   underline.
+4. Title: `art[]` lines from (92,360), 132px line step, each line jittered ±9px and ±0.045 rad,
+   font 126px (104px for lines over 6 chars) Permanent Marker, auto-shrunk to fit `W-200`, filled
+   plus a 3px stroke pass for weight.
+5. Tagline: 40px Permanent Marker at (96,790) `rotate(-.015)`.
+6. Two three-spoke marker stars at (W−118, 214) r26 and (W−176, 846) r15.
+7. `limited`/`locked` banner: 30px caps in a wobbly hand-drawn box, `rotate(-.34)` at (W−214, 300).
+8. Footer: "8 PHOTOS INSIDE" 27px at (96, H−108); a wobbly ellipse (r≈40, jittered) at (W−150,
+   H−120) holding "no.N" — N is the series index.
+9. Eight faint white radial gradients at 16% — copier toner unevenness, not dirt.
+
+`flipY: true`, `colorSpace: SRGB`, `ClampToEdgeWrapping`.
+Pack materials: foil = `MeshStandardMaterial({ color: design.foil, metalness:.92, roughness:.26,
+side:DoubleSide, transparent:true })`; art plane = `MeshStandardMaterial({ map, metalness:.05,
+roughness:.78, side:DoubleSide, transparent:true })`.
+
+Model: `assets/booster_pack_tcg_pack.glb` — two meshes, `Object_4` = foil body, the other = the art
+plane. Bounds x ±2.03, y −3.35…3.27, z −0.09…0.16.
+
+---
+
+## 8. State
+
+- `phase`: `bin | idle | tearing | dealing | collected`.
+- `currentId`: the pack out front; `opened[]`: ids already torn; `openedCount`.
+- `cards[]`: appended per pack, each `{ key, order, packId, slot, plate, tilt, tag, tier, ink,
+  title, date, medium }`; `tier` = series name, or "Bent corner" for the last card of every pack.
+- `filter`: `all` or a series id; resets to `all` whenever a pack is dealt.
+- Non-render refs: renderer/scene/camera, the plain rigs map, the tear rig, tear progress `p`,
+  pointer drag state, `binOut`, `lay` (cols/rows/salt), `binSizeNow`, `pickSeq`.
+- Data to fetch in the real site: the photograph per plate (and ideally a link to its gallery
+  entry). Everything else is static config.
+
+## 9. Design tokens (Broadsheet — `assets/broadsheet-styles.css`)
+
+Page ground `#17110f` (thrift-shop dark; the design system's `#f3f2f2` paper is used only on cards).
+Ink `#201e1d`. Cyan ramp `#e9f8ff #cbeeff #99e0ff #62c5ee #38a6cf #1186ac #006786 #004961 #0a303e`.
+Magenta ramp `#fff1f4 #ffdee6 #ffc0d0 #ff90b1 #ff458e #d82071 #aa0b56 #790e3d #4b1528`.
+Neutrals `#f8f4f4 #eae7e7 #d7d3d3 #bab6b6 #9b9797 #7d7979 #605d5d #444141 #2d2b2b`.
+Process yellow `#edbb00` — signage and tape. Marker ink `#1b1512`. Green chip `#7de08a`.
+Type: Source Serif 4 (400/600/700 + italic) for all UI; **Permanent Marker** for everything
+hand-written (bin FREE, zine covers). Spacing 5/10/15/20/30/40px. Shadows: cards use
+`0 3px 10px rgba(45,43,43,.16)`; signage uses hard offsets `2–4px 2–4px 0 rgba(0,0,0,.5)`.
+Nothing is axis-aligned: signs, chips, cards and buttons all carry ±0.5–3deg rotation.
+
+## 10. Assets
+- `assets/booster_pack_tcg_pack.glb` — Sketchfab "Booster Pack (TCG Pack)" by Hasan Ajami,
+  **CC-BY-4.0 — attribution required** on the page or in site credits.
+- `assets/broadsheet-styles.css`, `assets/broadsheet-readme.md` — design-system tokens.
+- Fonts: Source Serif 4 + Permanent Marker (Google Fonts).
+- three.js r184 (prototype loads from `https://esm.sh/three@0.184.0` + `examples/jsm/loaders/GLTFLoader.js`;
+  in a real build install `three`).
+- Photographs: none included. Placeholders are keyed `bin-<globalPlateNumber>` (001…256).
+
+## 11. Files
+- `reference/Pack Opening - Discount Bin.dc.html` — **the current design** (template + logic).
+- `reference/Pack Opening.dc.html` — v1, for diffing only.
+- `reference/support.js` — prototype runtime. Do not port.
+- `reference/image-slot.js` — drag-and-drop photo placeholder. Replace with real images.
+
+## 12. Known gaps
+- `locked: true` (Portraits) is cosmetic; no password gate exists yet.
+- No `prefers-reduced-motion` path — skipping the tear/flight and revealing cards directly is the
+  intended fallback.
+- Bin re-layout keeps opened packs hidden but still reserves their slots' shuffle indices.

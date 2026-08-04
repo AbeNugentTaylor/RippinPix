@@ -13,31 +13,31 @@ export interface DealBatch {
 interface FilterChip {
   id: string;
   label: string;
-  border: string;
   bg: string;
   fg: string;
+  tilt: number;
   select: () => void;
 }
 
 interface CollectionGridProps {
-  seriesTitle: string;
+  shopName: string;
+  packPrice: string;
   cards: CardT[];
   filterList: FilterChip[];
   hasCards: boolean;
   isEmpty: boolean;
-  countLabel: string;
-  packsLabel: string;
+  haulLabel: string;
   dealBatch: DealBatch | null;
 }
 
 export default function CollectionGrid({
-  seriesTitle,
+  shopName,
+  packPrice,
   cards,
   filterList,
   hasCards,
   isEmpty,
-  countLabel,
-  packsLabel,
+  haulLabel,
   dealBatch,
 }: CollectionGridProps) {
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -74,13 +74,13 @@ export default function CollectionGrid({
       outer.style.opacity = "0";
       outer.style.transform = `translate(${dx}px,${dy}px) scale(.34) rotate(${(
         (i - (keys.length - 1) / 2) *
-        4
+        6
       ).toFixed(1)}deg)`;
       inner.style.transform = "rotateY(180deg)";
 
       requestAnimationFrame(() => {
         const d = i * 80;
-        outer.style.transition = `transform 660ms cubic-bezier(.17,.89,.24,1.03) ${d}ms, opacity 180ms linear ${d}ms`;
+        outer.style.transition = `transform 660ms cubic-bezier(.17,.89,.24,1.06) ${d}ms, opacity 180ms linear ${d}ms`;
         inner.style.transition = `transform 460ms cubic-bezier(.2,.85,.3,1) ${d + 240}ms`;
         outer.style.opacity = "1";
         outer.style.transform = "none";
@@ -99,16 +99,12 @@ export default function CollectionGrid({
   }, [dealBatch]);
 
   return (
-    <section className="collection">
-      <div className="collection-heading-row">
-        <h2 className="collection-heading">The collection</h2>
-        <span className="collection-meta">
-          {countLabel} · {packsLabel}
-        </span>
+    <section className="haul">
+      <div className="haul-heading-row">
+        <h2 className="haul-heading">The haul</h2>
+        <span className="haul-meta">{haulLabel}</span>
       </div>
-      {isEmpty && (
-        <p className="collection-empty">Nothing pulled yet. Pick a pack above and tear it open.</p>
-      )}
+      {isEmpty && <p className="haul-empty">Nothing yet. The bin&apos;s right there.</p>}
       {hasCards && (
         <div className="filter-row">
           {filterList.map((f) => (
@@ -116,7 +112,7 @@ export default function CollectionGrid({
               key={f.id}
               onClick={f.select}
               className="filter-chip"
-              style={{ borderColor: f.border, background: f.bg, color: f.fg }}
+              style={{ background: f.bg, color: f.fg, transform: `rotate(${f.tilt}deg)` }}
             >
               {f.label}
             </button>
@@ -125,7 +121,13 @@ export default function CollectionGrid({
       )}
       <div ref={gridRef} className="grid">
         {cards.map((card) => (
-          <Card key={card.key} card={card} seriesTitle={seriesTitle} registerRefs={registerRefs} />
+          <Card
+            key={card.key}
+            card={card}
+            shopName={shopName}
+            packPrice={packPrice}
+            registerRefs={registerRefs}
+          />
         ))}
       </div>
     </section>
