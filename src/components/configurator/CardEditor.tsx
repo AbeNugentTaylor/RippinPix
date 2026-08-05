@@ -1,15 +1,48 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Card3D from "@/components/Card3D";
+import Card3D, {
+  BASE_TILT_X,
+  BASE_TILT_Y,
+  CLEARCOAT,
+  CLEARCOAT_ROUGHNESS,
+  DEFAULT_LIGHTS,
+  ENV_INTENSITY,
+  HOLO_STRENGTH,
+  IOR,
+  NORMAL_SCALE,
+  ROUGHNESS,
+  type Card3DOverrides,
+} from "@/components/Card3D";
 import CardCaptionOverlay from "@/components/CardCaptionOverlay";
 import CropEditor from "./CropEditor";
+import LightingDebugPanel from "./LightingDebugPanel";
 import type { Entry } from "./FolderBrowser";
 import { DESIGNS, POOLS } from "@/lib/designs";
 import { firstEmptySlot, configKey } from "@/lib/card-key";
 import type { Attribute, Card as CardT, CardConfig, Crop, Rarity } from "@/lib/types";
 
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "holo", "secret"];
+
+// Mirrors the defaulting logic in Card3D's own holo-properties effect, so the
+// debug panel's sliders start at whatever the current tier would normally
+// render, not an arbitrary zero.
+function defaultOverridesFor(rarity: Rarity, holo: boolean): Card3DOverrides {
+  return {
+    ambient: DEFAULT_LIGHTS.ambient,
+    key: DEFAULT_LIGHTS.key,
+    rim: DEFAULT_LIGHTS.rim,
+    clearcoat: holo ? CLEARCOAT[rarity] : CLEARCOAT.common,
+    clearcoatRoughness: holo ? CLEARCOAT_ROUGHNESS[rarity] : CLEARCOAT_ROUGHNESS.common,
+    roughness: holo ? ROUGHNESS[rarity] : ROUGHNESS.common,
+    envMapIntensity: holo ? ENV_INTENSITY[rarity] : ENV_INTENSITY.common,
+    holoStrength: holo ? HOLO_STRENGTH[rarity] : 0,
+    ior: holo ? IOR[rarity] : IOR.common,
+    normalScale: holo ? NORMAL_SCALE[rarity] : NORMAL_SCALE.common,
+    baseTiltX: BASE_TILT_X,
+    baseTiltY: BASE_TILT_Y,
+  };
+}
 
 interface CardEditorProps {
   image: Entry;
@@ -34,6 +67,7 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
   const [medium, setMedium] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<Card3DOverrides>(() => defaultOverridesFor("common", false));
 
   const design = DESIGNS.find((d) => d.id === designId) ?? DESIGNS[0];
   const totalSlots = design.packs * 8;
@@ -49,7 +83,14 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
 
   const setRarityAndHolo = (r: Rarity) => {
     setRarity(r);
-    setHolo(r === "holo" || r === "secret");
+    const nextHolo = r === "holo" || r === "secret";
+    setHolo(nextHolo);
+    setOverrides(defaultOverridesFor(r, nextHolo));
+  };
+
+  const setHoloAndOverrides = (nextHolo: boolean) => {
+    setHolo(nextHolo);
+    setOverrides(defaultOverridesFor(rarity, nextHolo));
   };
 
   const addAttribute = () => setAttributes((a) => [...a, { label: "", value: "" }]);
@@ -137,7 +178,7 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
         <div className="cfg-editor-preview">
           <span className="cfg-field-label">Live preview</span>
           <div className="cfg-preview-frame">
-            <Card3D photoUrl={src} crop={crop} rarity={rarity} holo={holo} />
+            <Card3D photoUrl={src} crop={crop} rarity={rarity} holo={holo} overrides={overrides} />
             <CardCaptionOverlay card={previewCard} />
           </div>
         </div>
@@ -178,7 +219,7 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
           </label>
 
           <label className="cfg-field cfg-field--inline">
-            <input type="checkbox" checked={holo} onChange={(e) => setHolo(e.target.checked)} />
+            <input type="checkbox" checked={holo} onChange={(e) => setHoloAndOverrides(e.target.checked)} />
             Holo foil effect
           </label>
 
@@ -242,6 +283,8 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
           {message && <p className="cfg-message">{message}</p>}
         </div>
       </div>
+
+      <LightingDebugPanel overrides={overrides} onChange={setOverrides} />
     </div>
   );
 }
