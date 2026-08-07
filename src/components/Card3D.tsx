@@ -116,10 +116,10 @@ export const ENV_INTENSITY: Record<Rarity, number> = {
   secret: 0.65,
 };
 
-// Etched-foil bump (see makeFoilNormalMap below) — the reference shader's
+// Etched-foil bump (see loadFoilNormalMap below) — the reference shader's
 // "heightmap -> normals" technique, ported as a normalMap so key/rim
-// lighting catches a fine embossed ridge pattern instead of a perfectly flat
-// surface. 0 for common: a plain print has no physical texture to catch.
+// lighting catches the cosmos-holo star/cross pattern instead of a perfectly
+// flat surface. 0 for common: a plain print has no physical texture to catch.
 export const NORMAL_SCALE: Record<Rarity, number> = {
   common: 0,
   uncommon: 0.08,
@@ -214,36 +214,56 @@ function makeHoloEnv(): THREE.Texture {
   return t;
 }
 
-// Procedural "etched foil" normal map — the reference shader's heightmap
-// (a repeating diagonal ridge pattern, the classic holo-foil texture) baked
-// straight to tangent-space normals instead of going through an actual
-// height field, since a normal map is all MeshPhysicalMaterial needs. Tiled
-// densely so the ridges read as a fine surface grain, not a visible pattern.
-function makeFoilNormalMap(): THREE.Texture {
-  const size = 64;
-  const c = document.createElement("canvas");
-  c.width = size;
-  c.height = size;
-  const g = c.getContext("2d")!;
-  const img = g.createImageData(size, size);
-  const d = img.data;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const i = (y * size + x) * 4;
-      const nx = Math.sin((x + y) * 0.5);
-      const ny = Math.sin((x - y) * 0.5);
-      d[i] = 128 + nx * 40;
-      d[i + 1] = 128 + ny * 40;
-      d[i + 2] = 255;
-      d[i + 3] = 255;
-    }
-  }
-  g.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = THREE.RepeatWrapping;
-  t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(10, 14);
-  return t;
+// "Cosmos holo" etched foil normal map, sourced directly from
+// /public/holo-mask.png (the scattered star/cross pattern classic Pokémon
+// TCG "cosmos holofoil" cards use) instead of a synthesized diagonal-ridge
+// pattern. The PNG is a plain grayscale height image, not a normal map —
+// MeshPhysicalMaterial needs tangent-space normals — so this loads it, reads
+// luminance as height, and bakes a normal map from the height gradient the
+// same way the old sine-wave version did (central difference -> RG, B=1).
+// The image's own aspect ratio (285x400) is almost exactly the card plane's
+// (6.3x8.8), so it's mapped once across the card's UVs, not tiled.
+function loadFoilNormalMap(url: string): Promise<THREE.Texture> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.width;
+      const h = img.height;
+      const src = document.createElement("canvas");
+      src.width = w;
+      src.height = h;
+      const sg = src.getContext("2d")!;
+      sg.drawImage(img, 0, 0);
+      const px = sg.getImageData(0, 0, w, h).data;
+      const lum = (x: number, y: number) => {
+        const cx = Math.min(w - 1, Math.max(0, x));
+        const cy = Math.min(h - 1, Math.max(0, y));
+        const i = (cy * w + cx) * 4;
+        return (px[i] + px[i + 1] + px[i + 2]) / (3 * 255);
+      };
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      const og = out.getContext("2d")!;
+      const normalImg = og.createImageData(w, h);
+      const d = normalImg.data;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          const nx = lum(x - 1, y) - lum(x + 1, y);
+          const ny = lum(x, y - 1) - lum(x, y + 1);
+          d[i] = 128 + nx * 90;
+          d[i + 1] = 128 + ny * 90;
+          d[i + 2] = 255;
+          d[i + 3] = 255;
+        }
+      }
+      og.putImageData(normalImg, 0, 0);
+      resolve(new THREE.CanvasTexture(out));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
 }
 
 // The holo overlay: a second mesh, same geometry as the card, sitting a
@@ -346,6 +366,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card
   const rimLightRef = useRef<THREE.DirectionalLight | null>(null);
   const holoMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
   const holoMeshRef = useRef<THREE.Mesh | null>(null);
+  const foilNormalRef = useRef<THREE.Texture | null>(null);
   const baseTiltRef = useRef({ x: BASE_TILT_X, y: BASE_TILT_Y });
 
   // Renders immediately rather than waiting for the next rAF tick, so a prop
@@ -420,7 +441,6 @@ export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card
     scene.add(rimLight);
     rimLightRef.current = rimLight;
 
-    const foilNormal = makeFoilNormalMap();
     const material = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
       metalness: 0,
@@ -429,10 +449,21 @@ export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card
       clearcoatRoughness: CLEARCOAT_ROUGHNESS.common,
       envMapIntensity: ENV_INTENSITY.common,
       ior: IOR.common,
-      normalMap: foilNormal,
       normalScale: new THREE.Vector2(NORMAL_SCALE.common, NORMAL_SCALE.common),
     });
     materialRef.current = material;
+    loadFoilNormalMap("/holo-mask.png")
+      .then((t) => {
+        if (dead.current) {
+          t.dispose();
+          return;
+        }
+        foilNormalRef.current = t;
+        material.normalMap = t;
+        material.needsUpdate = true;
+        renderNow();
+      })
+      .catch(() => {});
     const geometry = createCardGeometry();
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
@@ -522,7 +553,8 @@ export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card
       holoMaterial.dispose();
       geometry.dispose();
       env.dispose();
-      foilNormal.dispose();
+      foilNormalRef.current?.dispose();
+      foilNormalRef.current = null;
       renderer.dispose();
       if (renderer.domElement.parentNode) renderer.domElement.remove();
     };
