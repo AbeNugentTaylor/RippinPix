@@ -22,6 +22,16 @@ import type { Design, Pack, Phase, Slot } from "@/lib/types";
 const TEAR_Y = 2.89;
 const XMIN = -2.12;
 const XMAX = 2.12;
+// How far a hovered pack rises out of the bin — big enough to clear the rim
+// and its neighbors so the cover art is actually legible, not just the small
+// "about to pick this up" nudge it used to be. Y is straight up; Z is along
+// the bin's depth axis (positive = toward the camera, negative = away/back
+// into the bin — tuned negative here so the pack rises up and tips back
+// rather than crowding toward the viewer). Hand-tuned; see
+// docs/tuning-guide.md for how to iterate on these live.
+const HOVER_LIFT_Y = 5;
+const HOVER_LIFT_Z = -2;
+const HOVER_SCALE = 1.12;
 const MODEL_URL = "/models/booster_pack_tcg_pack.glb";
 
 interface DressedGroup {
@@ -1022,8 +1032,21 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
 
     onPick(plain.pack);
 
+    // Fly from wherever the pack actually is right now — which, since the
+    // hover-peek above can hold it well off its resting slot, is often not
+    // the same place as plain.pack.slot. Starting the flight from the slot
+    // instead (as this used to) snapped the pack back into the bin for one
+    // frame before it flew out, a visible pop that got a lot more obvious
+    // once hovering lifts packs far enough to read.
     const stageGroup = binStageRef.current;
-    const start = { ...plain.pack.slot };
+    const start = {
+      x: plain.root.position.x,
+      y: plain.root.position.y,
+      z: plain.root.position.z,
+      rx: plain.root.rotation.x,
+      ry: plain.root.rotation.y,
+      rz: plain.root.rotation.z,
+    };
     if (stageGroup) {
       start.x += stageGroup.position.x;
       start.z += stageGroup.position.z;
@@ -1353,11 +1376,27 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
             f.ry + (to.ry - f.ry) * e,
             f.rz + (to.rz - f.rz) * e
           );
+          p.root.scale.setScalar(1);
           if (k >= 1) p.tween = null;
           continue;
         }
-        p.root.position.set(s.x, s.y + p.hover * 0.95 + Math.sin(t * 0.7 + s.x) * 0.04, s.z + p.hover * 0.55);
-        p.root.rotation.set(s.rx + p.hover * 0.07, s.ry, s.rz - p.hover * 0.05);
+        const h = p.hover;
+        // Rotation blends from the slot's random resting jitter toward the
+        // same pitch the focused/picked pack reads at (counter.rx) with yaw
+        // and roll leveled out to 0 — the jitter is what makes the bin look
+        // tossed-together at rest, but it's exactly what makes the art
+        // unreadable when you're trying to peek at a specific pack.
+        p.root.position.set(
+          s.x,
+          s.y + h * HOVER_LIFT_Y + Math.sin(t * 0.7 + s.x) * 0.04,
+          s.z + h * HOVER_LIFT_Z
+        );
+        p.root.rotation.set(
+          s.rx + h * (counter.rx - s.rx),
+          s.ry * (1 - h),
+          s.rz * (1 - h)
+        );
+        p.root.scale.setScalar(1 + h * (HOVER_SCALE - 1));
       }
     }
 

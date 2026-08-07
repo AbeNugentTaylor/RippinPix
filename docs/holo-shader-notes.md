@@ -15,25 +15,24 @@ Reference doc for picking this back up. Everything below reflects the state as o
 
 ## How the holo effect works now
 
-Two independent pieces, both driven by rarity tier (`common` → `secret`):
+One piece, driven by rarity tier (`common` → `secret`): a **rainbow overlay** — a second mesh
+(`holoMesh`) parented to the card mesh, additively blended, custom `ShaderMaterial`
+(`HOLO_VERTEX_SHADER` / `HOLO_FRAGMENT_SHADER` in `Card3D.tsx`). Hue is driven **linearly** by
+pointer-tilt uniforms `uTiltX`/`uTiltY` (range roughly -1..1), not by `dot(normal, view)` — that was
+the original approach and it barely moved (cosine is ~flat near 0°, so a card that only tilts a few
+degrees produced almost no hue shift). Also has a parallax UV offset (`vUv + tilt * 0.22`) so the
+pattern visibly slides as a floating layer, and glare alpha grows slightly with tilt magnitude. Its
+visibility is stenciled per-pattern by `uHoloMask` (see "Holo Mask" below) — `"cosmos"` samples a
+real reference photo (`public/holo-mask.png`), `"stripes"`/`"sunburst"` are procedural.
 
-1. **Rainbow overlay** — a second mesh (`holoMesh`) parented to the card mesh, additively
-   blended, custom `ShaderMaterial` (`HOLO_VERTEX_SHADER` / `HOLO_FRAGMENT_SHADER` in
-   `Card3D.tsx`). Hue is driven **linearly** by pointer-tilt uniforms `uTiltX`/`uTiltY` (range
-   roughly -1..1), not by `dot(normal, view)` — that was the original approach and it barely
-   moved (cosine is ~flat near 0°, so a card that only tilts a few degrees produced almost no hue
-   shift). Also has a parallax UV offset (`vUv + tilt * 0.22`) so the pattern visibly slides as a
-   floating layer, and glare alpha grows slightly with tilt magnitude.
-2. **Etched foil bump** — `loadFoilNormalMap()` bakes a real cosmos-holofoil reference photo
-   (`public/holo-mask.png`, user-provided) into a normal map by reading its luminance as height and
-   taking the gradient (async — the image loads at mount, `foilNormalRef` holds the result once
-   ready), wired into the base `MeshPhysicalMaterial.normalMap` + a per-rarity `NORMAL_SCALE` table.
-   As of 2026-08-07 this only activates when `holoPattern === "cosmos"` (see "Holo Mask" below) —
-   it's that pattern's whole distinguishing look now, not a generic always-on holo texture. An
-   earlier version (`makeFoilNormalMap()`) procedurally synthesized a diagonal-ridge pattern instead
-   of using a real photo, and applied unconditionally to every holo-tier card regardless of pattern.
+**No physical bump anymore.** An earlier pass also baked that same cosmos photo into a normal map
+("etched foil bump") for physical depth on `MeshPhysicalMaterial.normalMap`, gated to
+`holoPattern === "cosmos"`. Removed 2026-08-07 (see the dated note below) — it turned out to be
+nearly invisible under the default light rig, and the mask alone was already carrying the entire
+visual effect. `loadCosmosTextures()`/`foilNormalRef`/`NORMAL_SCALE` referenced elsewhere in this doc
+no longer exist; the mask loader is `loadCosmosMaskData()` now.
 
-Both replaced an earlier attempt using `MeshPhysicalMaterial`'s built-in PBR `iridescence`
+This replaced an earlier attempt using `MeshPhysicalMaterial`'s built-in PBR `iridescence`
 property, which turned out to be a dead end: reading three.js's own shader source
 (`lights_physical_pars_fragment.glsl.js`) confirmed `clearcoat` computes a completely separate
 plain dielectric Fresnel with **zero reference to iridescence anywhere** — so the visible glare
@@ -173,6 +172,70 @@ photo. The bump is kept as a secondary physical-depth layer on top of the mask, 
 Next step if picking this back up: `_Holo_Color_Ramp` (see above) is probably the highest-value
 remaining item — a real gradient texture instead of raw HSV rotation.
 
+**Etched foil bump removed entirely; lightbox cosmos-mask race fixed (2026-08-07, follow-up).**
+Two changes, prompted by the user comparing the live editor preview against the click-to-view
+lightbox side by side:
+
+1. **Bump dropped.** Per the "bump-only was invisible" note above, the normal-map bump had already
+   been reduced to a minor secondary layer on top of the mask, which was doing all the actual visual
+   work. The user confirmed the mask alone reads great and asked to drop the bump rather than keep
+   maintaining it. `NORMAL_SCALE`, `Card3DOverrides.normalScale`, the `normalScale`/"Etched foil
+   bump" debug slider, and the normal-map half of `loadCosmosTextures()` are all gone —
+   `loadCosmosMaskData()` now only derives and returns the mask pixel data, nothing else.
+2. **Lightbox cosmos mismatch.** The mask/bump image load was scoped per `Card3D` mount, refetching
+   and re-decoding `/holo-mask.png` from scratch every time. The live editor preview's `Card3D`
+   mounts once and stays mounted, so it always had time to finish loading before anyone looked at
+   it. `CardLightbox` (`src/components/CardLightbox.tsx`) renders a **fresh** `Card3D` instance each
+   time it opens, so its mount raced its own load — if the click-to-view render happened before the
+   decode finished, the shader was still bound to the blank placeholder mask (fully unmasked, so the
+   rainbow shows everywhere instead of clustered in the cosmos flecks), which is what made the
+   full-size preview intermittently look different (flatter/more washed-out) from the small one.
+   Fix: the decoded mask pixel data is now cached in a module-level promise
+   (`cosmosMaskDataPromise`), so only the very first `Card3D` on the page ever actually waits on the
+   network/decode — every later mount (e.g. opening the lightbox) resolves against the already-
+   decoded data. Each mount still builds its own `THREE.CanvasTexture` from that shared pixel data
+   (`textureFromCosmosMaskData()`) so per-instance texture disposal on unmount stays safe.
+   **This alone did not fix the reported bug** — see the next note; it was a real but secondary
+   improvement, not the actual cause of what the user was seeing.
+
+**Real cause of the lightbox mismatch: Strict Mode double-invoke corrupts the mask swap
+(2026-08-07, follow-up).** After the fix above, the user reported the lightbox still showed the
+wrong (unmasked, washed-out) look for cosmos — every time, not intermittently. Screenshots taken via
+a scripted Playwright/Edge probe (`playwright-core`, launched against the system Edge via
+`channel: "msedge"` so no Chromium download was needed) confirmed it: the small preview always shows
+the correct clustered star/cross flecks, the lightbox always showed a smooth, unmasked rainbow band
+instead — deterministic, not a race.
+
+Root cause: the app router defaults `reactStrictMode` to `true` (true since Next 13.5.1, and this
+project never overrides it), so in dev every component's mount effect runs an extra
+setup→cleanup→setup cycle before settling. The cosmos-mask load's `.then()` callback guarded itself
+with the shared `dead` ref (`if (dead.current) return;`) — but the *second* setup resets
+`dead.current` back to `false`, so the *first, thrown-away* setup's callback no longer sees itself as
+cancelled when it eventually fires. When it runs, it reads `holoMaskTexturesRef.current` (a ref, now
+pointing at the *second* mount's live textures object) and does its usual "swap the mask in if the
+uniform still points at the old placeholder" dance — except the placeholder it disposes is the
+*second* mount's placeholder (correctly identified via the ref), while the `holoMaterial` it compares
+the uniform against is the *first* mount's own (dead, disposed) material — an object-identity
+mismatch that's always false. Net effect: the live uniform never gets reassigned, but the live
+mount's placeholder texture *does* get disposed out from under it, permanently orphaning the real
+decoded mask in `textures.cosmos` where nothing ever looks again.
+
+This only produces a visible bug when `holoPattern` is already `"cosmos"` on the very first render —
+exactly `CardLightbox`'s situation (no `holoPattern` state transition, it's `"cosmos"` from mount
+one). The editor's live preview starts at `"none"` and only switches to `"cosmos"` later via an
+ordinary (non-doubled) prop-change effect run, by which point the double-invoke dance has already
+settled and `textures.cosmos` happens to hold a valid decoded mask — so the small preview was never
+actually affected, and this bug most likely predates every change made today (the caching fix above
+didn't cause it, just didn't happen to fix it either).
+
+Fix: replaced the shared `dead.current` guard in that one `.then()` with a `cancelled` variable local
+to each individual effect invocation — the same pattern the neighboring photo-texture-load effect
+already used correctly. A local lets each Strict Mode invocation's own cleanup flip only *its own*
+flag, so the first, thrown-away invocation's callback is inert (returns immediately) instead of
+running with a resurrected-but-wrong `dead.current`. Verified with the same Playwright probe:
+reopening the lightbox repeatedly now consistently shows the clustered mask, matching the small
+preview.
+
 ## Suggested approach for next session
 
 1. Re-clone `shaders-holo-card` somewhere durable if you want to keep digging (last clone was in
@@ -181,7 +244,7 @@ remaining item — a real gradient texture instead of raw HSV rotation.
    more "trading card" than raw hue rotation), trace it in the shader graph, port to GLSL in
    `HOLO_FRAGMENT_SHADER`.
 3. Add a matching slider to `LightingDebugPanel.tsx` + default value in `CardEditor.tsx`'s
-   `defaultOverridesFor()` + per-rarity table in `Card3D.tsx`, same pattern as `NORMAL_SCALE`.
+   `defaultOverridesFor()` + per-rarity table in `Card3D.tsx`, same pattern as `HOLO_STRENGTH`.
 4. Tune live via the debug panel, bake final numbers into the per-rarity tables once it looks
    right.
 

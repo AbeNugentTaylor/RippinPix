@@ -6,6 +6,7 @@ import CollectionGrid, { type DealBatch } from "./CollectionGrid";
 import CardLightbox from "./CardLightbox";
 import { DESIGNS, PACKS, PER_PACK, plateAt } from "@/lib/designs";
 import { configKey } from "@/lib/card-key";
+import { preloadImage } from "@/lib/preload-image";
 import type { Card, CardConfig, Pack, Phase } from "@/lib/types";
 
 const SHOP_NAME = "RippinPix";
@@ -88,6 +89,10 @@ export default function PackOpeningApp({ photoManifest, cardConfigs }: PackOpeni
         crop: config?.crop,
       });
     }
+    // Warm the full-res fetch for each card now, while the deal/scroll
+    // animation is still playing, so it's already cached by the time the
+    // user clicks into the lightbox (see Card3D's blank-white-on-open fix).
+    fresh.forEach((c) => preloadImage(c.photoUrl));
     setCards((prev) => [...prev, ...fresh]);
     setFilter("all");
     setPhase("dealing");

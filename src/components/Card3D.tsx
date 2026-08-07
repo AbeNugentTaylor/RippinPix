@@ -20,7 +20,6 @@ export interface Card3DOverrides {
   holoBandWidth?: number;
   holoPatternScale?: number;
   holoSparkleFreq?: number;
-  normalScale?: number;
   baseTiltX?: number;
   baseTiltY?: number;
 }
@@ -116,21 +115,6 @@ export const ENV_INTENSITY: Record<Rarity, number> = {
   common: 0,
   uncommon: 0.08,
   rare: 0.2,
-  holo: 0.5,
-  secret: 0.65,
-};
-
-// Etched-foil bump (see loadCosmosTextures below) — the reference shader's
-// "heightmap -> normals" technique, ported as a normalMap so key/rim
-// lighting catches the cosmos-holo star/cross pattern instead of a perfectly
-// flat surface. 0 for common: a plain print has no physical texture to catch.
-// A secondary effect alongside loadCosmosTextures' mask (see the "Holo mask
-// textures" comment below) — the mask is what actually makes "cosmos" read
-// as different from "none"; the bump adds physical depth on top of that.
-export const NORMAL_SCALE: Record<Rarity, number> = {
-  common: 0,
-  uncommon: 0.15,
-  rare: 0.3,
   holo: 0.5,
   secret: 0.65,
 };
@@ -241,29 +225,33 @@ function makeHoloEnv(): THREE.Texture {
   return t;
 }
 
-// "Cosmos holo" textures, both sourced directly from /public/holo-mask.png
-// (the scattered star/cross pattern classic Pokémon TCG "cosmos holofoil"
-// cards use) rather than synthesized:
+// "Cosmos holo" mask, sourced directly from /public/holo-mask.png (the
+// scattered star/cross pattern classic Pokémon TCG "cosmos holofoil" cards
+// use) rather than synthesized: R = a contrast-boosted version of the
+// image's own luminance, so the sparkle clusters stencil the rainbow
+// overlay's visibility (see HOLO_FRAGMENT_SHADER / makeHoloMaskTextures),
+// same mechanism "stripes"/"sunburst" use. Centered on the image's own mean
+// brightness (not a fixed constant) so it adapts to the actual photo instead
+// of assuming its exposure. An earlier version also baked this image into a
+// normal-map bump for physical depth, but that turned out to be nearly
+// invisible under normal lighting (see docs/holo-shader-notes.md) — the mask
+// alone is what makes "cosmos" read as different from "none", so the bump
+// was dropped.
 //
-// 1. A normal map for the base card's physical bump (etched-foil lighting
-//    response) — the PNG is a plain grayscale height image, not a normal
-//    map, so this reads luminance as height and bakes a normal map from the
-//    height gradient (central difference -> RG, B=1), same technique the
-//    old synthetic sine-wave version used.
-// 2. A mask for the holo overlay's `uHoloMask` sampler (see
-//    HOLO_FRAGMENT_SHADER / makeHoloMaskTextures) — R = a contrast-boosted
-//    version of the same luminance data, so the sparkle clusters stencil the
-//    rainbow's visibility. Needed because the bump alone turned out to be
-//    too subtle to read under normal lighting (a physically-based specular
-//    highlight only shows in a narrow angle/light sweet-spot); the mask is
-//    unmissable regardless of angle, same as how stripes/sunburst work.
-//    Centered on the image's own mean brightness (not a fixed constant) so
-//    it adapts to the actual photo instead of assuming its exposure.
-//
-// The image's own aspect ratio (285x400) is almost exactly the card plane's
-// (6.3x8.8), so both are mapped once across the card's UVs, not tiled.
-function loadCosmosTextures(url: string): Promise<{ normalMap: THREE.Texture; mask: THREE.Texture }> {
-  return new Promise((resolve, reject) => {
+// Cached at module scope, not per-mount: CardLightbox (src/components/
+// CardLightbox.tsx) renders a fresh Card3D instance every time it opens, and
+// without this cache each fresh instance would re-fetch and re-decode the
+// image from scratch, racing its own first render — until that finished, the
+// shader would fall back to the blank placeholder mask (fully unmasked, so
+// the rainbow shows everywhere instead of clustered), which is what made the
+// full-size lightbox preview intermittently look different from the live
+// editor preview (already loaded, never re-mounts). Caching the promise
+// means only the very first Card3D on the page ever actually waits on it.
+let cosmosMaskDataPromise: Promise<{ width: number; height: number; data: Uint8ClampedArray<ArrayBuffer> }> | null = null;
+
+function loadCosmosMaskData(url: string): Promise<{ width: number; height: number; data: Uint8ClampedArray<ArrayBuffer> }> {
+  if (cosmosMaskDataPromise) return cosmosMaskDataPromise;
+  cosmosMaskDataPromise = new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const w = img.width;
@@ -290,43 +278,41 @@ function loadCosmosTextures(url: string): Promise<{ normalMap: THREE.Texture; ma
       // through as visible rainbow, not the whole card.
       const alphaFor = (v: number) => 1 / (1 + Math.exp(-14 * (v - mean * 1.3)));
 
-      const normalCanvas = document.createElement("canvas");
-      normalCanvas.width = w;
-      normalCanvas.height = h;
-      const ng = normalCanvas.getContext("2d")!;
-      const normalImg = ng.createImageData(w, h);
-      const nd = normalImg.data;
-
-      const maskCanvas = document.createElement("canvas");
-      maskCanvas.width = w;
-      maskCanvas.height = h;
-      const mg = maskCanvas.getContext("2d")!;
-      const maskImg = mg.createImageData(w, h);
-      const md = maskImg.data;
-
+      const data = new Uint8ClampedArray(new ArrayBuffer(w * h * 4));
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           const i = (y * w + x) * 4;
-          const nx = lum(x - 1, y) - lum(x + 1, y);
-          const ny = lum(x, y - 1) - lum(x, y + 1);
-          nd[i] = 128 + nx * 260;
-          nd[i + 1] = 128 + ny * 260;
-          nd[i + 2] = 255;
-          nd[i + 3] = 255;
-
-          md[i] = Math.round(alphaFor(lum(x, y)) * 255);
-          md[i + 1] = 0;
-          md[i + 2] = 0;
-          md[i + 3] = 255;
+          data[i] = Math.round(alphaFor(lum(x, y)) * 255);
+          data[i + 1] = 0;
+          data[i + 2] = 0;
+          data[i + 3] = 255;
         }
       }
-      ng.putImageData(normalImg, 0, 0);
-      mg.putImageData(maskImg, 0, 0);
-      resolve({ normalMap: new THREE.CanvasTexture(normalCanvas), mask: new THREE.CanvasTexture(maskCanvas) });
+      resolve({ width: w, height: h, data });
     };
-    img.onerror = reject;
+    img.onerror = () => {
+      cosmosMaskDataPromise = null; // allow a retry on the next mount
+      reject(new Error("failed to load cosmos mask source"));
+    };
     img.src = url;
   });
+  return cosmosMaskDataPromise;
+}
+
+// Every Card3D instance needs its own THREE.Texture/canvas (textures get
+// disposed per-instance on unmount — see the mount effect's cleanup), so the
+// cached pixel data above is turned into a fresh texture here rather than
+// sharing one Texture object across instances.
+function textureFromCosmosMaskData(maskData: { width: number; height: number; data: Uint8ClampedArray<ArrayBuffer> }): THREE.Texture {
+  const c = document.createElement("canvas");
+  c.width = maskData.width;
+  c.height = maskData.height;
+  const g = c.getContext("2d")!;
+  g.putImageData(new ImageData(maskData.data, maskData.width, maskData.height), 0, 0);
+  const texture = new THREE.CanvasTexture(c);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
 }
 
 // Holo mask textures — stencils the rainbow overlay shows through, sampled
@@ -339,7 +325,7 @@ function loadCosmosTextures(url: string): Promise<{ normalMap: THREE.Texture; ma
 // unclear license, baked at the wrong aspect for this card). "cosmos" starts
 // out pointing at the same blank (unmasked) texture as "none" — the real
 // mask is derived asynchronously from the actual reference photo by
-// loadCosmosTextures (see below) and swapped in once it loads, since
+// loadCosmosMaskData (see above) and swapped in once it loads, since
 // deriving it from an <img> can't happen synchronously at mount like the
 // other three.
 //
@@ -433,7 +419,7 @@ function makeSunburstMask(): THREE.Texture {
 function makeHoloMaskTextures(): Record<HoloPattern, THREE.Texture> {
   const textures = {
     none: makeBlankMask(),
-    // Placeholder until loadCosmosTextures' async photo-derived mask loads
+    // Placeholder until loadCosmosMaskData's async photo-derived mask loads
     // and replaces this (see the mount effect below) — blank rather than
     // empty so the overlay isn't invisible during the brief loading window.
     cosmos: makeBlankMask(),
@@ -588,9 +574,14 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
   const rimLightRef = useRef<THREE.DirectionalLight | null>(null);
   const holoMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
   const holoMeshRef = useRef<THREE.Mesh | null>(null);
-  const foilNormalRef = useRef<THREE.Texture | null>(null);
   const holoMaskTexturesRef = useRef<Record<HoloPattern, THREE.Texture> | null>(null);
   const baseTiltRef = useRef({ x: BASE_TILT_X, y: BASE_TILT_Y });
+  // Starts transparent and fades to 1 once there's something worth showing
+  // (photo texture applied, or the no-photo placeholder tint) — without
+  // this the card renders as a solid white rectangle (the material's default
+  // color with no map yet) for however long the full-res fetch takes, which
+  // reads as a blank-white flash rather than the backdrop showing through.
+  const opacityTargetRef = useRef(0);
 
   // Renders immediately rather than waiting for the next rAF tick, so a prop
   // change (new crop, new rarity, texture finishing its async load) shows up
@@ -672,7 +663,8 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       clearcoatRoughness: CLEARCOAT_ROUGHNESS.common,
       envMapIntensity: ENV_INTENSITY.common,
       ior: IOR.common,
-      normalScale: new THREE.Vector2(NORMAL_SCALE.common, NORMAL_SCALE.common),
+      transparent: true,
+      opacity: 0,
     });
     materialRef.current = material;
     const geometry = createCardGeometry();
@@ -711,16 +703,23 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     mesh.add(holoMesh);
     holoMeshRef.current = holoMesh;
 
-    loadCosmosTextures("/holo-mask.png")
-      .then(({ normalMap, mask }) => {
-        if (dead.current) {
-          normalMap.dispose();
-          mask.dispose();
-          return;
-        }
-        foilNormalRef.current = normalMap;
-        material.normalMap = normalMap;
-        material.needsUpdate = true;
+    // A per-invocation flag, not the shared `dead` ref: React Strict Mode
+    // (on by default for the app router in dev) double-invokes this whole
+    // effect once on mount — setup, cleanup, setup again — and the second
+    // setup resets `dead.current` back to false. That means the *first*,
+    // thrown-away setup's callback below would no longer see itself as
+    // cancelled, and would run against a torn-down `holoMaterial` while
+    // still mutating/disposing whatever the live (second) mount's
+    // `holoMaskTexturesRef` currently holds — corrupting the real mount's
+    // mask swap and leaving `uHoloMask` stuck on a disposed blank
+    // placeholder forever. `cancelled` is a fresh local for every
+    // invocation, so only *this* setup's own cleanup can flip it (same
+    // pattern the photo-texture effect below already uses correctly).
+    let cancelled = false;
+    loadCosmosMaskData("/holo-mask.png")
+      .then((maskData) => {
+        if (cancelled) return;
+        const mask = textureFromCosmosMaskData(maskData);
 
         const textures = holoMaskTexturesRef.current;
         if (textures) {
@@ -775,6 +774,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       // similar to how the CSS version's gradient reads as "alive" at rest.
       mesh.rotation.y = baseTiltRef.current.y + Math.sin(t * 0.5) * 0.035 + px * 0.16;
       mesh.rotation.x = baseTiltRef.current.x + Math.sin(t * 0.37) * 0.025 - py * 0.12;
+      material.opacity += (opacityTargetRef.current - material.opacity) * 0.2;
       holoMaterial.uniforms.uTime.value = t;
       holoMaterial.uniforms.uTiltX.value = px;
       holoMaterial.uniforms.uTiltY.value = py;
@@ -784,6 +784,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
 
     return () => {
       dead.current = true;
+      cancelled = true;
       if (raf.current) cancelAnimationFrame(raf.current);
       observer.disconnect();
       el.removeEventListener("pointermove", onMove);
@@ -804,8 +805,6 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       holoMaterial.dispose();
       geometry.dispose();
       env.dispose();
-      foilNormalRef.current?.dispose();
-      foilNormalRef.current = null;
       Object.values(holoMaskTextures).forEach((t) => t.dispose());
       renderer.dispose();
       if (renderer.domElement.parentNode) renderer.domElement.remove();
@@ -822,6 +821,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       material.map = null;
       material.color.set(0xdcdcdc); // neutral placeholder tint, only when there's no photo to read
       material.needsUpdate = true;
+      opacityTargetRef.current = 1;
       renderNow();
       return;
     }
@@ -840,6 +840,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       material.map = texture;
       material.color.set(0xffffff); // white so the color/contrast is the photo's own, not tinted
       material.needsUpdate = true;
+      opacityTargetRef.current = 1;
       renderNow();
     });
     return () => {
@@ -866,13 +867,6 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     material.envMapIntensity = active ? ENV_INTENSITY[tier] : ENV_INTENSITY.common;
     material.ior = active ? IOR[tier] : IOR.common;
     material.roughness = active ? ROUGHNESS[tier] : ROUGHNESS.common;
-    // The image-based etched-foil bump (see loadCosmosTextures) is a
-    // secondary effect on top of the "cosmos" mask, not a generic holo
-    // texture — so it only kicks in when that pattern is actually selected,
-    // same as the stripes/sunburst masks only show up when picked.
-    const bumpActive = active && holoPattern === "cosmos";
-    const normalScale = bumpActive ? NORMAL_SCALE[tier] : 0;
-    material.normalScale.set(normalScale, normalScale);
     if (active && tier === "secret") {
       material.emissive = new THREE.Color("#3a2c00");
       material.emissiveIntensity = 0.2;
@@ -886,7 +880,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     if (holoMaterial) holoMaterial.uniforms.uIntensity.value = strength;
     if (holoMesh) holoMesh.visible = strength > 0;
     renderNow();
-  }, [rarity, holo, holoPattern]);
+  }, [rarity, holo]);
 
   // Swap which mask texture the holo overlay's alpha is stenciled through.
   useEffect(() => {
@@ -920,7 +914,6 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       if (overrides.roughness !== undefined) material.roughness = overrides.roughness;
       if (overrides.envMapIntensity !== undefined) material.envMapIntensity = overrides.envMapIntensity;
       if (overrides.ior !== undefined) material.ior = overrides.ior;
-      if (overrides.normalScale !== undefined) material.normalScale.set(overrides.normalScale, overrides.normalScale);
       material.needsUpdate = true;
     }
     if (overrides.holoStrength !== undefined) {

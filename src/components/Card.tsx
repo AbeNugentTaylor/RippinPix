@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef } from "react";
 import type { Card as CardT } from "@/lib/types";
 import { useTiltPointer } from "@/lib/useTiltPointer";
+import { preloadImage } from "@/lib/preload-image";
 import CardCaptionOverlay from "./CardCaptionOverlay";
 
 interface CardProps {
@@ -43,6 +44,8 @@ export default function Card({ card, shopName, packPrice, registerRefs, onSelect
       style={{ order: card.order, display: card.display }}
       onPointerMove={card.holo ? onPointerMove : undefined}
       onPointerLeave={card.holo ? onPointerLeave : undefined}
+      onPointerEnter={onSelect ? () => preloadImage(card.photoUrl) : undefined}
+      onFocus={onSelect ? () => preloadImage(card.photoUrl) : undefined}
       onClick={onSelect ? () => onSelect(card) : undefined}
       onKeyDown={
         onSelect

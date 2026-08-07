@@ -85,3 +85,5 @@ the site.
 The booster pack 3D model is "Booster Pack (TCG Pack)" by Hasan Ajami (Sketchfab),
 licensed CC BY 4.0. Credited in the page footer — keep that credit if you redesign
 the footer.
+
+Version: 0.1.0 (mirrors `package.json`; bump both together)

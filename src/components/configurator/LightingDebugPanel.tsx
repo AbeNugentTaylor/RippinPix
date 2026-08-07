@@ -20,7 +20,6 @@ const FIELDS: { key: keyof Card3DOverrides; label: string; min: number; max: num
   { key: "holoPatternScale", label: "Holo pattern scale (higher = smaller shapes)", min: 0.3, max: 3, step: 0.01 },
   { key: "holoSparkleFreq", label: "Holo sparkle flicker speed", min: 0.1, max: 2, step: 0.01 },
   { key: "ior", label: "IOR", min: 1, max: 2, step: 0.01 },
-  { key: "normalScale", label: "Etched foil bump", min: 0, max: 1, step: 0.01 },
   { key: "baseTiltX", label: "Base tilt X", min: -0.4, max: 0.4, step: 0.01 },
   { key: "baseTiltY", label: "Base tilt Y", min: -0.4, max: 0.4, step: 0.01 },
 ];

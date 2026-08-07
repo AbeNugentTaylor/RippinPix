@@ -61,15 +61,33 @@ export default function CollectionGrid({
 
     if (reducedMotion) return; // cards render already in their resting state
 
-    keys.forEach((key, i) => {
-      const els = refs.current.get(key);
-      if (!els?.outer || !els.inner) return;
-      const { outer, inner } = els;
-      const r = outer.getBoundingClientRect();
-      const dx = anchor.x - (r.left + r.width / 2 + window.scrollX);
-      const dy = anchor.y - (r.top + r.height / 2 + window.scrollY);
-      const back = inner.children[1] as HTMLElement | undefined;
+    // Every card's getBoundingClientRect() read has to come before any
+    // card's style write below. Interleaving them (read card 1, write card
+    // 1, read card 2, ...) forces the browser to re-run layout on every
+    // single iteration, since each write invalidates the layout the next
+    // read needs — classic "layout thrashing". That's the biggest single
+    // cost on the very first pack pull specifically: the haul grid has
+    // never been laid out before (it doesn't exist in the DOM until the
+    // first card arrives), so the first of these forced reflows is a full
+    // layout of a brand-new subtree, not the cheap incremental kind later
+    // deals get once the grid is already warm.
+    const cards = keys
+      .map((key) => {
+        const els = refs.current.get(key);
+        if (!els?.outer || !els.inner) return null;
+        const { outer, inner } = els;
+        const r = outer.getBoundingClientRect();
+        return {
+          outer,
+          inner,
+          back: inner.children[1] as HTMLElement | undefined,
+          dx: anchor.x - (r.left + r.width / 2 + window.scrollX),
+          dy: anchor.y - (r.top + r.height / 2 + window.scrollY),
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null);
 
+    cards.forEach(({ outer, inner, back, dx, dy }, i) => {
       outer.style.transition = "none";
       inner.style.transition = "none";
       if (back) back.style.visibility = "visible";
@@ -79,8 +97,10 @@ export default function CollectionGrid({
         6
       ).toFixed(1)}deg)`;
       inner.style.transform = "rotateY(180deg)";
+    });
 
-      requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      cards.forEach(({ outer, inner, back }, i) => {
         const d = i * 80;
         outer.style.transition = `transform 660ms cubic-bezier(.17,.89,.24,1.06) ${d}ms, opacity 180ms linear ${d}ms`;
         inner.style.transition = `transform 460ms cubic-bezier(.2,.85,.3,1) ${d + 240}ms`;

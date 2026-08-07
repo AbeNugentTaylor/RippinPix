@@ -13,7 +13,6 @@ import Card3D, {
   HOLO_SPARKLE_FREQ,
   HOLO_STRENGTH,
   IOR,
-  NORMAL_SCALE,
   ROUGHNESS,
   type Card3DOverrides,
 } from "@/components/Card3D";
@@ -31,19 +30,15 @@ export type EditorTarget = { kind: "new"; image: Entry } | { kind: "edit"; key: 
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "holo", "secret"];
 const HOLO_PATTERNS: { value: HoloPattern; label: string }[] = [
   { value: "none", label: "None (plain rainbow)" },
-  { value: "cosmos", label: "Cosmos (etched foil)" },
+  { value: "cosmos", label: "Cosmos" },
   { value: "stripes", label: "Stripes" },
   { value: "sunburst", label: "Sunburst" },
 ];
 
 // Mirrors the defaulting logic in Card3D's own holo-properties effect, so the
 // debug panel's sliders start at whatever the current tier would normally
-// render, not an arbitrary zero. Card3D always passes a concrete overrides
-// object here through to the preview, which — unlike the real site's
-// CardLightbox (no overrides prop at all) — means this function is the only
-// thing gating normalScale for the live preview; it has to mirror Card3D's
-// own "cosmos" gating exactly or the preview and real site would disagree.
-function defaultOverridesFor(rarity: Rarity, holo: boolean, holoPattern: HoloPattern): Card3DOverrides {
+// render, not an arbitrary zero.
+function defaultOverridesFor(rarity: Rarity, holo: boolean): Card3DOverrides {
   return {
     ambient: DEFAULT_LIGHTS.ambient,
     key: DEFAULT_LIGHTS.key,
@@ -57,7 +52,6 @@ function defaultOverridesFor(rarity: Rarity, holo: boolean, holoPattern: HoloPat
     holoPatternScale: HOLO_PATTERN_SCALE,
     holoSparkleFreq: HOLO_SPARKLE_FREQ,
     ior: holo ? IOR[rarity] : IOR.common,
-    normalScale: holo && holoPattern === "cosmos" ? NORMAL_SCALE[rarity] : 0,
     baseTiltX: BASE_TILT_X,
     baseTiltY: BASE_TILT_Y,
   };
@@ -92,7 +86,7 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
   const [message, setMessage] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [overrides, setOverrides] = useState<Card3DOverrides>(() =>
-    defaultOverridesFor(editingConfig?.rarity ?? "common", editingConfig?.holo ?? false, editingConfig?.holoPattern ?? "none")
+    defaultOverridesFor(editingConfig?.rarity ?? "common", editingConfig?.holo ?? false)
   );
 
   const design = DESIGNS.find((d) => d.id === designId) ?? DESIGNS[0];
@@ -123,17 +117,12 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
     setRarity(r);
     const nextHolo = r === "holo" || r === "secret";
     setHolo(nextHolo);
-    setOverrides(defaultOverridesFor(r, nextHolo, holoPattern));
+    setOverrides(defaultOverridesFor(r, nextHolo));
   };
 
   const setHoloAndOverrides = (nextHolo: boolean) => {
     setHolo(nextHolo);
-    setOverrides(defaultOverridesFor(rarity, nextHolo, holoPattern));
-  };
-
-  const setHoloPatternAndOverrides = (nextPattern: HoloPattern) => {
-    setHoloPattern(nextPattern);
-    setOverrides(defaultOverridesFor(rarity, holo, nextPattern));
+    setOverrides(defaultOverridesFor(rarity, nextHolo));
   };
 
   const addAttribute = () => setAttributes((a) => [...a, { label: "", value: "" }]);
@@ -308,7 +297,7 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
           {holo && (
             <label className="cfg-field">
               Holo pattern
-              <select value={holoPattern} onChange={(e) => setHoloPatternAndOverrides(e.target.value as HoloPattern)}>
+              <select value={holoPattern} onChange={(e) => setHoloPattern(e.target.value as HoloPattern)}>
                 {HOLO_PATTERNS.map((p) => (
                   <option key={p.value} value={p.value}>
                     {p.label}
