@@ -120,16 +120,19 @@ export const ENV_INTENSITY: Record<Rarity, number> = {
   secret: 0.65,
 };
 
-// Etched-foil bump (see loadFoilNormalMap below) — the reference shader's
+// Etched-foil bump (see loadCosmosTextures below) — the reference shader's
 // "heightmap -> normals" technique, ported as a normalMap so key/rim
 // lighting catches the cosmos-holo star/cross pattern instead of a perfectly
 // flat surface. 0 for common: a plain print has no physical texture to catch.
+// A secondary effect alongside loadCosmosTextures' mask (see the "Holo mask
+// textures" comment below) — the mask is what actually makes "cosmos" read
+// as different from "none"; the bump adds physical depth on top of that.
 export const NORMAL_SCALE: Record<Rarity, number> = {
   common: 0,
-  uncommon: 0.08,
-  rare: 0.16,
-  holo: 0.3,
-  secret: 0.38,
+  uncommon: 0.15,
+  rare: 0.3,
+  holo: 0.5,
+  secret: 0.65,
 };
 
 const PLANE_W = 6.3;
@@ -238,16 +241,28 @@ function makeHoloEnv(): THREE.Texture {
   return t;
 }
 
-// "Cosmos holo" etched foil normal map, sourced directly from
-// /public/holo-mask.png (the scattered star/cross pattern classic Pokémon
-// TCG "cosmos holofoil" cards use) instead of a synthesized diagonal-ridge
-// pattern. The PNG is a plain grayscale height image, not a normal map —
-// MeshPhysicalMaterial needs tangent-space normals — so this loads it, reads
-// luminance as height, and bakes a normal map from the height gradient the
-// same way the old sine-wave version did (central difference -> RG, B=1).
+// "Cosmos holo" textures, both sourced directly from /public/holo-mask.png
+// (the scattered star/cross pattern classic Pokémon TCG "cosmos holofoil"
+// cards use) rather than synthesized:
+//
+// 1. A normal map for the base card's physical bump (etched-foil lighting
+//    response) — the PNG is a plain grayscale height image, not a normal
+//    map, so this reads luminance as height and bakes a normal map from the
+//    height gradient (central difference -> RG, B=1), same technique the
+//    old synthetic sine-wave version used.
+// 2. A mask for the holo overlay's `uHoloMask` sampler (see
+//    HOLO_FRAGMENT_SHADER / makeHoloMaskTextures) — R = a contrast-boosted
+//    version of the same luminance data, so the sparkle clusters stencil the
+//    rainbow's visibility. Needed because the bump alone turned out to be
+//    too subtle to read under normal lighting (a physically-based specular
+//    highlight only shows in a narrow angle/light sweet-spot); the mask is
+//    unmissable regardless of angle, same as how stripes/sunburst work.
+//    Centered on the image's own mean brightness (not a fixed constant) so
+//    it adapts to the actual photo instead of assuming its exposure.
+//
 // The image's own aspect ratio (285x400) is almost exactly the card plane's
-// (6.3x8.8), so it's mapped once across the card's UVs, not tiled.
-function loadFoilNormalMap(url: string): Promise<THREE.Texture> {
+// (6.3x8.8), so both are mapped once across the card's UVs, not tiled.
+function loadCosmosTextures(url: string): Promise<{ normalMap: THREE.Texture; mask: THREE.Texture }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -265,25 +280,49 @@ function loadFoilNormalMap(url: string): Promise<THREE.Texture> {
         const i = (cy * w + cx) * 4;
         return (px[i] + px[i + 1] + px[i + 2]) / (3 * 255);
       };
-      const out = document.createElement("canvas");
-      out.width = w;
-      out.height = h;
-      const og = out.getContext("2d")!;
-      const normalImg = og.createImageData(w, h);
-      const d = normalImg.data;
+      let sum = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) sum += lum(x, y);
+      }
+      const mean = sum / (w * h);
+      // Sigmoid contrast centered above the image's own average brightness —
+      // only the sparkle clusters (brighter than the dark background) show
+      // through as visible rainbow, not the whole card.
+      const alphaFor = (v: number) => 1 / (1 + Math.exp(-14 * (v - mean * 1.3)));
+
+      const normalCanvas = document.createElement("canvas");
+      normalCanvas.width = w;
+      normalCanvas.height = h;
+      const ng = normalCanvas.getContext("2d")!;
+      const normalImg = ng.createImageData(w, h);
+      const nd = normalImg.data;
+
+      const maskCanvas = document.createElement("canvas");
+      maskCanvas.width = w;
+      maskCanvas.height = h;
+      const mg = maskCanvas.getContext("2d")!;
+      const maskImg = mg.createImageData(w, h);
+      const md = maskImg.data;
+
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           const i = (y * w + x) * 4;
           const nx = lum(x - 1, y) - lum(x + 1, y);
           const ny = lum(x, y - 1) - lum(x, y + 1);
-          d[i] = 128 + nx * 90;
-          d[i + 1] = 128 + ny * 90;
-          d[i + 2] = 255;
-          d[i + 3] = 255;
+          nd[i] = 128 + nx * 260;
+          nd[i + 1] = 128 + ny * 260;
+          nd[i + 2] = 255;
+          nd[i + 3] = 255;
+
+          md[i] = Math.round(alphaFor(lum(x, y)) * 255);
+          md[i + 1] = 0;
+          md[i + 2] = 0;
+          md[i + 3] = 255;
         }
       }
-      og.putImageData(normalImg, 0, 0);
-      resolve(new THREE.CanvasTexture(out));
+      ng.putImageData(normalImg, 0, 0);
+      mg.putImageData(maskImg, 0, 0);
+      resolve({ normalMap: new THREE.CanvasTexture(normalCanvas), mask: new THREE.CanvasTexture(maskCanvas) });
     };
     img.onerror = reject;
     img.src = url;
@@ -297,11 +336,12 @@ function loadFoilNormalMap(url: string): Promise<THREE.Texture> {
 // reference shader graph (see docs/holo-shader-notes.md) — "stripes" is a
 // diagonal foil pattern, "sunburst" rays from a bright core. Generated
 // procedurally rather than importing the reference PNGs (Unity assets of
-// unclear license, baked at the wrong aspect for this card). "cosmos" isn't
-// a mask at all — it reuses the blank (unmasked) texture and instead drives
-// loadFoilNormalMap's image-based bump (see the rarity/holo/holoPattern
-// effect below), since it's sourced from a real cosmos-holofoil photo rather
-// than a synthesized stencil.
+// unclear license, baked at the wrong aspect for this card). "cosmos" starts
+// out pointing at the same blank (unmasked) texture as "none" — the real
+// mask is derived asynchronously from the actual reference photo by
+// loadCosmosTextures (see below) and swapped in once it loads, since
+// deriving it from an <img> can't happen synchronously at mount like the
+// other three.
 //
 // Channel layout: R is the visibility mask HOLO_FRAGMENT_SHADER multiplies
 // into alpha, same as a plain grayscale mask. G/B are reserved for a
@@ -393,8 +433,9 @@ function makeSunburstMask(): THREE.Texture {
 function makeHoloMaskTextures(): Record<HoloPattern, THREE.Texture> {
   const textures = {
     none: makeBlankMask(),
-    // "cosmos" is unmasked (see the comment above MASK_W) — its distinct
-    // look comes entirely from loadFoilNormalMap's image-based bump instead.
+    // Placeholder until loadCosmosTextures' async photo-derived mask loads
+    // and replaces this (see the mount effect below) — blank rather than
+    // empty so the overlay isn't invisible during the brief loading window.
     cosmos: makeBlankMask(),
     stripes: makeStripesMask(),
     sunburst: makeSunburstMask(),
@@ -634,18 +675,6 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       normalScale: new THREE.Vector2(NORMAL_SCALE.common, NORMAL_SCALE.common),
     });
     materialRef.current = material;
-    loadFoilNormalMap("/holo-mask.png")
-      .then((t) => {
-        if (dead.current) {
-          t.dispose();
-          return;
-        }
-        foilNormalRef.current = t;
-        material.normalMap = t;
-        material.needsUpdate = true;
-        renderNow();
-      })
-      .catch(() => {});
     const geometry = createCardGeometry();
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
@@ -681,6 +710,34 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     holoMesh.visible = false;
     mesh.add(holoMesh);
     holoMeshRef.current = holoMesh;
+
+    loadCosmosTextures("/holo-mask.png")
+      .then(({ normalMap, mask }) => {
+        if (dead.current) {
+          normalMap.dispose();
+          mask.dispose();
+          return;
+        }
+        foilNormalRef.current = normalMap;
+        material.normalMap = normalMap;
+        material.needsUpdate = true;
+
+        const textures = holoMaskTexturesRef.current;
+        if (textures) {
+          const placeholder = textures.cosmos;
+          textures.cosmos = mask;
+          // If "cosmos" is the pattern currently showing, the overlay is
+          // still bound to the blank placeholder (created synchronously at
+          // mount, before this photo finished loading) — swap it live so
+          // the real mask appears without needing a pattern re-selection.
+          if (holoMaterial.uniforms.uHoloMask.value === placeholder) {
+            holoMaterial.uniforms.uHoloMask.value = mask;
+          }
+          placeholder.dispose();
+        }
+        renderNow();
+      })
+      .catch(() => {});
 
     const observer = new ResizeObserver(() => {
       const nw = el.clientWidth;
@@ -809,8 +866,8 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     material.envMapIntensity = active ? ENV_INTENSITY[tier] : ENV_INTENSITY.common;
     material.ior = active ? IOR[tier] : IOR.common;
     material.roughness = active ? ROUGHNESS[tier] : ROUGHNESS.common;
-    // The image-based etched-foil bump (see loadFoilNormalMap) is the
-    // "cosmos" pattern's whole distinguishing look, not a generic holo
+    // The image-based etched-foil bump (see loadCosmosTextures) is a
+    // secondary effect on top of the "cosmos" mask, not a generic holo
     // texture — so it only kicks in when that pattern is actually selected,
     // same as the stripes/sunburst masks only show up when picked.
     const bumpActive = active && holoPattern === "cosmos";
