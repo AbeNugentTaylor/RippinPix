@@ -148,7 +148,74 @@
   font-style: italic;
 }
 
+/* Folder browser — whole-folder thumbnail grid */
+
+.cfg-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  margin-top: var(--space-3);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.cfg-image-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-neutral-700);
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  background: var(--color-neutral-800);
+}
+
+.cfg-image-thumb:hover {
+  border-color: var(--color-accent-300);
+}
+
+.cfg-image-thumb--active {
+  border-color: var(--color-accent-300);
+  box-shadow: 0 0 0 2px var(--color-accent-600);
+}
+
+.cfg-image-thumb-name {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 2px 4px;
+  font-size: 9px;
+  line-height: 1.3;
+  color: var(--color-neutral-100);
+  background: rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Card editor */
+
+.cfg-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.cfg-editor-heading .cfg-panel-title {
+  margin-bottom: 0;
+}
+
+.cfg-editor-close {
+  background: none;
+  border: 1px solid var(--color-neutral-600);
+  color: var(--color-neutral-300);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
 
 .cfg-editor-body {
   display: grid;
@@ -204,6 +271,18 @@
   overflow: hidden;
   border-radius: 11px; /* matches the real card's corner ratio at this frame's width */
   box-shadow: var(--shadow-md);
+  padding: 0;
+  border: none;
+  display: block;
+}
+
+.cfg-preview-frame--clickable {
+  cursor: zoom-in;
+}
+
+.cfg-preview-frame--clickable:hover,
+.cfg-preview-frame--clickable:focus-visible {
+  box-shadow: var(--shadow-md), 0 0 0 2px var(--color-accent-500);
 }
 
 .cfg-editor-form {
@@ -352,6 +431,23 @@
   padding: 6px;
   border-radius: var(--radius-sm);
   background: var(--color-neutral-800);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.cfg-imported-row:hover {
+  border-color: var(--color-neutral-600);
+}
+
+.cfg-imported-row--active {
+  border-color: var(--color-accent-300);
+  background: var(--color-neutral-700);
+}
+
+.cfg-imported-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .cfg-imported-thumb {

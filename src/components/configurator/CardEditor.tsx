@@ -8,6 +8,9 @@ import Card3D, {
   CLEARCOAT_ROUGHNESS,
   DEFAULT_LIGHTS,
   ENV_INTENSITY,
+  HOLO_BAND_WIDTH,
+  HOLO_PATTERN_SCALE,
+  HOLO_SPARKLE_FREQ,
   HOLO_STRENGTH,
   IOR,
   NORMAL_SCALE,
@@ -15,14 +18,23 @@ import Card3D, {
   type Card3DOverrides,
 } from "@/components/Card3D";
 import CardCaptionOverlay from "@/components/CardCaptionOverlay";
+import CardLightbox from "@/components/CardLightbox";
 import CropEditor from "./CropEditor";
 import LightingDebugPanel from "./LightingDebugPanel";
 import type { Entry } from "./FolderBrowser";
 import { DESIGNS, POOLS } from "@/lib/designs";
 import { firstEmptySlot, configKey } from "@/lib/card-key";
-import type { Attribute, Card as CardT, CardConfig, Crop, Rarity } from "@/lib/types";
+import type { Attribute, Card as CardT, CardConfig, Crop, HoloPattern, Rarity } from "@/lib/types";
+
+export type EditorTarget = { kind: "new"; image: Entry } | { kind: "edit"; key: string };
 
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "holo", "secret"];
+const HOLO_PATTERNS: { value: HoloPattern; label: string }[] = [
+  { value: "none", label: "None (plain rainbow)" },
+  { value: "cosmos", label: "Cosmos (star clusters)" },
+  { value: "stripes", label: "Stripes" },
+  { value: "sunburst", label: "Sunburst" },
+];
 
 // Mirrors the defaulting logic in Card3D's own holo-properties effect, so the
 // debug panel's sliders start at whatever the current tier would normally
@@ -37,6 +49,9 @@ function defaultOverridesFor(rarity: Rarity, holo: boolean): Card3DOverrides {
     roughness: holo ? ROUGHNESS[rarity] : ROUGHNESS.common,
     envMapIntensity: holo ? ENV_INTENSITY[rarity] : ENV_INTENSITY.common,
     holoStrength: holo ? HOLO_STRENGTH[rarity] : 0,
+    holoBandWidth: HOLO_BAND_WIDTH,
+    holoPatternScale: HOLO_PATTERN_SCALE,
+    holoSparkleFreq: HOLO_SPARKLE_FREQ,
     ior: holo ? IOR[rarity] : IOR.common,
     normalScale: holo ? NORMAL_SCALE[rarity] : NORMAL_SCALE.common,
     baseTiltX: BASE_TILT_X,
@@ -45,9 +60,10 @@ function defaultOverridesFor(rarity: Rarity, holo: boolean): Card3DOverrides {
 }
 
 interface CardEditorProps {
-  image: Entry;
+  target: EditorTarget;
   configs: Record<string, CardConfig>;
   onSaved: () => void;
+  onClose: () => void;
 }
 
 function slotFor(designId: string, configs: Record<string, CardConfig>): number {
@@ -55,26 +71,44 @@ function slotFor(designId: string, configs: Record<string, CardConfig>): number 
   return firstEmptySlot(designId, design.packs * 8, configs) ?? 1;
 }
 
-export default function CardEditor({ image, configs, onSaved }: CardEditorProps) {
-  const [designId, setDesignId] = useState(DESIGNS[0].id);
-  const [local, setLocal] = useState(() => slotFor(DESIGNS[0].id, configs));
-  const [crop, setCrop] = useState<Crop>({ x: 50, y: 50, zoom: 1 });
-  const [rarity, setRarity] = useState<Rarity>("common");
-  const [holo, setHolo] = useState(false);
-  const [attributes, setAttributes] = useState<Attribute[]>([]);
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState("");
-  const [medium, setMedium] = useState("");
+export default function CardEditor({ target, configs, onSaved, onClose }: CardEditorProps) {
+  const editingConfig = target.kind === "edit" ? configs[target.key] : null;
+
+  const [designId, setDesignId] = useState(() => editingConfig?.designId ?? DESIGNS[0].id);
+  const [local, setLocal] = useState(() => editingConfig?.local ?? slotFor(DESIGNS[0].id, configs));
+  const [crop, setCrop] = useState<Crop>(() => editingConfig?.crop ?? { x: 50, y: 50, zoom: 1 });
+  const [rarity, setRarity] = useState<Rarity>(() => editingConfig?.rarity ?? "common");
+  const [holo, setHolo] = useState(() => editingConfig?.holo ?? false);
+  const [holoPattern, setHoloPattern] = useState<HoloPattern>(() => editingConfig?.holoPattern ?? "none");
+  const [attributes, setAttributes] = useState<Attribute[]>(() => editingConfig?.attributes ?? []);
+  const [title, setTitle] = useState(() => editingConfig?.title ?? "");
+  const [date, setDate] = useState(() => editingConfig?.date ?? "");
+  const [medium, setMedium] = useState(() => editingConfig?.medium ?? "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [overrides, setOverrides] = useState<Card3DOverrides>(() => defaultOverridesFor("common", false));
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [overrides, setOverrides] = useState<Card3DOverrides>(() =>
+    defaultOverridesFor(editingConfig?.rarity ?? "common", editingConfig?.holo ?? false)
+  );
 
   const design = DESIGNS.find((d) => d.id === designId) ?? DESIGNS[0];
   const totalSlots = design.packs * 8;
   const placeholder = POOLS[designId]?.[local - 1];
-  const existing = configs[configKey(designId, local)];
+  const occupyingKey = configKey(designId, local);
+  const occupiedBySelf = target.kind === "edit" && target.key === occupyingKey;
+  const existing = occupiedBySelf ? undefined : configs[occupyingKey];
 
-  const src = `/api/local-image?path=${encodeURIComponent(image.path)}`;
+  const src =
+    target.kind === "edit" && editingConfig
+      ? `/photos/${editingConfig.designId}/${editingConfig.fileName}`
+      : target.kind === "new"
+        ? `/api/local-image?path=${encodeURIComponent(target.image.path)}`
+        : "";
+
+  const heading =
+    target.kind === "edit"
+      ? `Editing ${editingConfig?.title || target.key}`
+      : target.image.name;
 
   const handleDesignChange = (id: string) => {
     setDesignId(id);
@@ -115,10 +149,11 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
       photoUrl: src,
       rarity,
       holo,
+      holoPattern,
       attributes,
       crop,
     }),
-    [designId, local, design, title, placeholder, date, medium, src, rarity, holo, attributes, crop]
+    [designId, local, design, title, placeholder, date, medium, src, rarity, holo, holoPattern, attributes, crop]
   );
 
   const handleSave = async () => {
@@ -129,12 +164,14 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourcePath: image.path,
+          existingKey: target.kind === "edit" ? target.key : undefined,
+          sourcePath: target.kind === "new" ? target.image.path : undefined,
           designId,
           local,
           crop,
           rarity,
           holo,
+          holoPattern,
           attributes: attributes.filter((a) => a.label.trim() || a.value.trim()),
           title: title || undefined,
           date: date || undefined,
@@ -155,9 +192,25 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
     }
   };
 
+  if (target.kind === "edit" && !editingConfig) {
+    return (
+      <div className="cfg-panel cfg-editor">
+        <p className="cfg-empty">This card was deleted elsewhere — nothing to edit.</p>
+        <button type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="cfg-panel cfg-editor">
-      <h2 className="cfg-panel-title">{image.name}</h2>
+      <div className="cfg-editor-heading">
+        <h2 className="cfg-panel-title">{heading}</h2>
+        <button type="button" className="cfg-editor-close" onClick={onClose}>
+          {target.kind === "edit" ? "Done editing" : "Clear"}
+        </button>
+      </div>
 
       <div className="cfg-editor-body">
         <div className="cfg-editor-crop">
@@ -176,12 +229,32 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
         </div>
 
         <div className="cfg-editor-preview">
-          <span className="cfg-field-label">Live preview</span>
-          <div className="cfg-preview-frame">
-            <Card3D photoUrl={src} crop={crop} rarity={rarity} holo={holo} overrides={overrides} />
+          <span className="cfg-field-label">Live preview — click to view full size</span>
+          <div
+            className="cfg-preview-frame cfg-preview-frame--clickable"
+            role="button"
+            tabIndex={0}
+            onClick={() => setLightboxOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setLightboxOpen(true);
+              }
+            }}
+            aria-label="View full size, as it will appear in the production app"
+          >
+            <Card3D
+              photoUrl={src}
+              crop={crop}
+              rarity={rarity}
+              holo={holo}
+              holoPattern={holoPattern}
+              overrides={overrides}
+            />
             <CardCaptionOverlay card={previewCard} />
           </div>
         </div>
+        {lightboxOpen && <CardLightbox card={previewCard} onClose={() => setLightboxOpen(false)} />}
 
         <div className="cfg-editor-form">
           <label className="cfg-field">
@@ -222,6 +295,19 @@ export default function CardEditor({ image, configs, onSaved }: CardEditorProps)
             <input type="checkbox" checked={holo} onChange={(e) => setHoloAndOverrides(e.target.checked)} />
             Holo foil effect
           </label>
+
+          {holo && (
+            <label className="cfg-field">
+              Holo pattern
+              <select value={holoPattern} onChange={(e) => setHoloPattern(e.target.value as HoloPattern)}>
+                {HOLO_PATTERNS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className="cfg-field">
             Title

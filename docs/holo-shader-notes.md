@@ -54,20 +54,78 @@ worth digging into next:
 - **Holo Color Ramp** — likely a gradient texture the hue/position value samples into, instead of
   raw HSV rotation. Could make the rainbow feel more "designed" (matching a specific foil look)
   rather than a full even spectrum.
-- **Holo Density** — probably controls how many rainbow bands/repeats show across the card
-  surface. Our current version has one continuous sweep; this could add a stripe/banding control.
-- **Holo Direction** — likely the axis the pattern travels along (currently hardcoded as the
-  UV diagonal in our version).
 - **Holo Noise Scale** — probably breaks up the rainbow with a noise texture so it's not a
   perfectly clean gradient (real foil isn't uniform).
 - **Holo Rotation Scroll Speed** / **Holo Anim Speed** — likely separate idle-animation controls;
   we currently only have one `uTime`-driven drift term.
 
-None of these are implemented — just confirmed to exist as named, exposed properties in the
-shader graph. Next step is opening the `.shadergraph` JSON (re-clone the repo — it was only
-cloned into a session-scoped scratchpad temp dir last time, not kept in this repo) and tracing
-each property's node graph the same way the hue-shift and parallax nodes were traced, then port
-whichever ones look good in the live debug-panel preview.
+**Holo Mask — traced and partially ported (2026-08-05).** There's a dedicated "Holo Mask" node
+group in the shader graph (view-vector → dot-product → sine → saturate chain sampling a
+`Texture2D` property) exposing four properties: `_Holo_Mask`, `_Holo_Density`, `_Holo_Offset`,
+`_Holo_Direction`. So "Holo Density"/"Holo Direction" aren't independent noise/banding controls as
+originally guessed — they're UV transforms (scale/offset/rotate) feeding the mask texture sample.
+Swapping `_Holo_Mask` is literally how the reference project switches pattern styles. Reference
+textures at `Assets/Textures/HoloMask{,2,3,4,5}.png`:
+- `HoloMask.png` — blank/white, unused by any material (a "no mask" placeholder).
+- `HoloMask2.png` — scattered soft-edged dot clusters, varying size/density. **This is the
+  "cosmos" look.** Wired into `CardArtworkBG.mat`.
+- `HoloMask3.png` — a photographed reference image of a real cosmos-foil card (colorful, not
+  grayscale) — art reference only, not a shader input, not referenced by GUID anywhere.
+- `HoloMask4.png` — plain vertical stripes. Wired into `CardArtworkBG2.mat` / `CardInterior.mat`.
+- `HoloMask5.png` — radial sunburst/starburst rays from a bright center point.
+
+Ported into `Card3D.tsx` as `HoloPattern = "none" | "cosmos" | "stripes" | "sunburst"`: rather than
+importing the Unity PNGs (unclear license, and baked at the wrong aspect for this card), each
+pattern is procedurally generated once at mount (`makeCosmosMask`/`makeStripesMask`/
+`makeSunburstMask`, alongside the existing `makeFoilNormalMap`-style canvas approach) and sampled
+in `HOLO_FRAGMENT_SHADER` via a new `uHoloMask` sampler at `vUv` (fixed to the card, unlike the
+rainbow's own parallax-shifted UV — matches the reference's "pattern is a stencil baked to the
+card, color slides across it" look), multiplied straight into the existing alpha term. `"none"`
+samples a 1×1 white texture so intensity math is untouched when no pattern is selected.
+`HoloMask3.png`'s art-reference photo was not ported (it's not a mask, nothing to port).
+
+**Traveling glare band (2026-08-05, follow-up).** First pass had a real gap from the reference
+video: alpha was near-uniform across the whole card (only weakly scaled by a *global* ndotv/tilt
+term), so the whole card lit up evenly instead of a bright band sweeping across it as the card
+tilts. Fixed in `HOLO_FRAGMENT_SHADER` by computing `cardDiag` (position along the card's diagonal,
+fixed UV — not the parallax-offset one hue uses) and gating alpha by distance from a `bandCenter`
+that moves with `uTiltX`/`uTiltY` via `smoothstep`. Width is `uBandWidth`
+(`HOLO_BAND_WIDTH = 0.34` constant, also exposed as a "Holo band width" debug-panel slider —
+narrower reads as a sharper/more localized streak, closer to the reference; wider approaches the
+old always-lit look).
+
+**Cosmos rework — hard edges + per-fleck flicker (2026-08-05, second follow-up).** Real reference
+photos of cosmos foil (user-provided) showed two things the first port missed: (1) sharp-edged
+flecks — circles, squares, diamonds, plus/cross glyphs — not soft radial-gradient blobs, and (2)
+individual sparkles flicker in and out independently as the card rotates, rather than the whole
+mask brightening/dimming together. `makeCosmosMask` now draws hard-edged shapes via direct
+pixel-membership tests (`fleckContains`, no gradients) at varied sizes (mostly tiny, a few larger),
+plus a dense fine-dust layer underneath. Each fleck gets its own random frequency/phase packed into
+the mask texture's G/B channels; `HOLO_FRAGMENT_SHADER` reads those and drives a per-fleck
+`sin(tiltAngle * freq + phase)` gate, so different flecks light up at different tilt angles instead
+of uniformly. G=B=0 means "always on, no flicker" (used by the fine dust and by every other mask —
+`makeStripesMask`/`makeSunburstMask` explicitly zero G/B after drawing since canvas draw calls
+write equal R/G/B for white, which would otherwise misfire this gate).
+
+**Tunable pattern scale + flicker speed (2026-08-05, third follow-up).** User feedback on the
+sparkle rework: flecks read too big, and flickered too fast for ordinary mouse movement. Two new
+live-tunable uniforms in `HOLO_FRAGMENT_SHADER`, both exposed as debug-panel sliders (and baked
+defaults as module constants, same pattern as `HOLO_BAND_WIDTH`):
+- `uMaskScale` (`HOLO_PATTERN_SCALE`, default 1) — the mask UV is sampled as
+  `(vUv - 0.5) * uMaskScale + 0.5`, i.e. zoomed around the card's center. >1 tiles the mask more
+  times across the card (smaller/denser shapes); <1 zooms in (bigger shapes). Needed
+  `THREE.RepeatWrapping` on the cosmos/stripes/sunburst textures (set in `makeHoloMaskTextures`) so
+  values >1 tile cleanly instead of clamping at the texture edge. This is the same lever as the
+  reference shader graph's `_Holo_Density` property (a UV scale on the mask sample).
+- `uSparkleFreqScale` (`HOLO_SPARKLE_FREQ`, default 1) — multiplies each fleck's per-shape flicker
+  frequency. Also lowered the *baseline* frequency range baked into the mask itself
+  (`freq = (1.0 + maskSample.g * 6.0) * uSparkleFreqScale`, down from `4.0 + g * 20.0`) since the
+  original range meant even a ~30° pointer swing could push a fleck's `sin()` argument through more
+  than a full cycle — the actual cause of the "flashes too fast" complaint, not just a matter of
+  taste.
+
+Next step if picking this back up: `_Holo_Color_Ramp` (see above) is probably the highest-value
+remaining item — a real gradient texture instead of raw HSV rotation.
 
 ## Suggested approach for next session
 

@@ -42,6 +42,11 @@ export type Phase = "bin" | "idle" | "tearing" | "dealing" | "collected";
 
 export type Rarity = "common" | "uncommon" | "rare" | "holo" | "secret";
 
+// Named after the reference shader's `_Holo_Mask` textures (see
+// docs/holo-shader-notes.md) — a stencil the rainbow overlay shows through,
+// baked fixed to the card rather than sliding with the parallax/hue layer.
+export type HoloPattern = "none" | "cosmos" | "stripes" | "sunburst";
+
 export interface Attribute {
   label: string;
   value: string;
@@ -63,6 +68,7 @@ export interface CardConfig {
   crop: Crop;
   rarity: Rarity;
   holo: boolean;
+  holoPattern?: HoloPattern;
   attributes: Attribute[];
   title?: string;
   date?: string;
@@ -87,6 +93,7 @@ export interface Card {
   display?: "block" | "none";
   rarity?: Rarity;
   holo?: boolean;
+  holoPattern?: HoloPattern;
   attributes?: Attribute[];
   crop?: Crop;
 }
