@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import type { Crop, Rarity } from "@/lib/types";
+import type { Crop, HoloPattern, Rarity } from "@/lib/types";
 
 // Live-tunable overrides for the debug panel (src/components/configurator/
 // LightingDebugPanel.tsx) — anything left undefined falls back to the normal
@@ -17,6 +17,9 @@ export interface Card3DOverrides {
   envMapIntensity?: number;
   ior?: number;
   holoStrength?: number;
+  holoBandWidth?: number;
+  holoPatternScale?: number;
+  holoSparkleFreq?: number;
   normalScale?: number;
   baseTiltX?: number;
   baseTiltY?: number;
@@ -27,6 +30,7 @@ interface Card3DProps {
   crop?: Crop;
   rarity?: Rarity;
   holo?: boolean;
+  holoPattern?: HoloPattern;
   overrides?: Card3DOverrides;
 }
 
@@ -144,6 +148,25 @@ export const BASE_TILT_X = 0;
 // see the mount effect below for why ambient carries most of the exposure
 // and key/rim stay off-axis.
 export const DEFAULT_LIGHTS = { ambient: 1.33, key: 1.84, rim: 0.89 };
+
+// How wide the traveling glare band is, as a fraction of the card's
+// diagonal — narrower reads as a sharper, more localized streak (closer to
+// the reference video); wider approaches the old "whole card lit at once"
+// look. Same for every rarity; only holoStrength/HOLO_STRENGTH scale how
+// bright the band gets.
+export const HOLO_BAND_WIDTH = 0.34;
+
+// Scales the UV the pattern mask is sampled at (around the card's center) —
+// >1 tiles the mask more times across the card, so shapes/stripes read
+// smaller and denser; <1 zooms in, so they read bigger. Mirrors the
+// reference shader graph's `_Holo_Density` UV-scale property (see
+// docs/holo-shader-notes.md).
+export const HOLO_PATTERN_SCALE = 1;
+
+// Multiplies the cosmos mask's per-fleck flicker frequency (itself packed
+// per-shape into the mask texture — see makeCosmosMask). Lower = calmer,
+// slower flicker for the same pointer movement; higher = twitchier.
+export const HOLO_SPARKLE_FREQ = 1;
 
 // A 63:88 plane with rounded corners (real cards aren't sharp-cornered
 // rectangles).
@@ -266,6 +289,193 @@ function loadFoilNormalMap(url: string): Promise<THREE.Texture> {
   });
 }
 
+// Holo mask textures — stencils the rainbow overlay shows through, sampled
+// straight at vUv (fixed to the card) rather than the rainbow's own
+// parallax-shifted UV, so the pattern itself stays put while the color
+// slides across it. Ported from the named `_Holo_Mask` textures in the
+// reference shader graph (see docs/holo-shader-notes.md) — "cosmos" is a
+// dot/nebula field, "stripes" a diagonal foil pattern, "sunburst" rays from a
+// bright core. Generated procedurally rather than importing the reference
+// PNGs (Unity assets of unclear license, baked at the wrong aspect for this
+// card).
+//
+// Channel layout: R is the visibility mask HOLO_FRAGMENT_SHADER multiplies
+// into alpha, same as a plain grayscale mask. G/B are only meaningful for
+// "cosmos": a per-fleck random frequency/phase pair, packed in so each
+// sparkle can flicker in and out independently as the view angle changes
+// (see the sparkle-gate math in HOLO_FRAGMENT_SHADER) instead of the whole
+// mask fading as one flat layer. Every other mask must keep G=B=0 so the
+// shader treats it as "always on" rather than reading garbage into that gate
+// — canvas draw calls (fillRect/stroke) write equal R/G/B for white, so
+// those masks explicitly zero G/B after drawing.
+const MASK_W = 256;
+const MASK_H = Math.round(MASK_W * (PLANE_H / PLANE_W));
+
+function zeroGB(imageData: ImageData): ImageData {
+  const d = imageData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    d[i + 1] = 0;
+    d[i + 2] = 0;
+  }
+  return imageData;
+}
+
+function makeBlankMask(): THREE.Texture {
+  const c = document.createElement("canvas");
+  c.width = 1;
+  c.height = 1;
+  const g = c.getContext("2d")!;
+  const img = g.createImageData(1, 1);
+  img.data[0] = 255;
+  img.data[3] = 255;
+  g.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(c);
+}
+
+type FleckShape = "circle" | "square" | "diamond" | "cross";
+const FLECK_SHAPES: FleckShape[] = ["circle", "square", "diamond", "cross"];
+
+// Hard-edged (no soft falloff) membership test — real foil glitter reads as
+// crisp cut facets, not airbrushed blobs.
+function fleckContains(shape: FleckShape, dx: number, dy: number, r: number): boolean {
+  switch (shape) {
+    case "circle":
+      return dx * dx + dy * dy <= r * r;
+    case "square":
+      return Math.abs(dx) <= r && Math.abs(dy) <= r;
+    case "diamond":
+      return Math.abs(dx) + Math.abs(dy) <= r;
+    case "cross": {
+      const thin = Math.max(1, r * 0.3);
+      return (Math.abs(dx) <= thin || Math.abs(dy) <= thin) && Math.max(Math.abs(dx), Math.abs(dy)) <= r;
+    }
+  }
+}
+
+function makeCosmosMask(): THREE.Texture {
+  const c = document.createElement("canvas");
+  c.width = MASK_W;
+  c.height = MASK_H;
+  const g = c.getContext("2d")!;
+  const img = g.createImageData(MASK_W, MASK_H);
+  const d = img.data;
+
+  // Fine dust: dense, single-pixel, always-on grain (G=B=0, so the shader's
+  // sparkle-flicker gate leaves it alone) — the constant noise floor real
+  // holo foil has even where no distinct glint is catching the light.
+  const dustCount = 1400;
+  for (let i = 0; i < dustCount; i++) {
+    const x = Math.floor(Math.random() * MASK_W);
+    const y = Math.floor(Math.random() * MASK_H);
+    const idx = (y * MASK_W + x) * 4;
+    const v = Math.round(70 + Math.random() * 185);
+    if (v > d[idx]) d[idx] = v;
+    d[idx + 3] = 255;
+  }
+
+  // Sparkle flecks: hard-edged shapes, sizes skewed small with a few larger
+  // ones, each stamped with its own random frequency/phase so it flickers
+  // independently (see HOLO_FRAGMENT_SHADER's sparkle gate).
+  const fleckCount = 190;
+  for (let i = 0; i < fleckCount; i++) {
+    const cx = Math.random() * MASK_W;
+    const cy = Math.random() * MASK_H;
+    const r = Math.random() < 0.85 ? 2 + Math.random() * 3.5 : 7 + Math.random() * 9;
+    const shape = FLECK_SHAPES[Math.floor(Math.random() * FLECK_SHAPES.length)];
+    const freqByte = Math.floor(Math.random() * 256);
+    const phaseByte = Math.floor(Math.random() * 256);
+    const minX = Math.max(0, Math.floor(cx - r));
+    const maxX = Math.min(MASK_W - 1, Math.ceil(cx + r));
+    const minY = Math.max(0, Math.floor(cy - r));
+    const maxY = Math.min(MASK_H - 1, Math.ceil(cy + r));
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        if (!fleckContains(shape, x - cx, y - cy, r)) continue;
+        const idx = (y * MASK_W + x) * 4;
+        d[idx] = 255;
+        d[idx + 1] = freqByte;
+        d[idx + 2] = phaseByte;
+        d[idx + 3] = 255;
+      }
+    }
+  }
+
+  g.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(c);
+}
+
+function makeStripesMask(): THREE.Texture {
+  const c = document.createElement("canvas");
+  c.width = MASK_W;
+  c.height = MASK_H;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#000";
+  g.fillRect(0, 0, MASK_W, MASK_H);
+  g.strokeStyle = "#fff";
+  g.lineWidth = 3;
+  g.save();
+  g.translate(MASK_W / 2, MASK_H / 2);
+  g.rotate(Math.PI / 8);
+  const diag = Math.sqrt(MASK_W * MASK_W + MASK_H * MASK_H);
+  for (let x = -diag; x <= diag; x += 9) {
+    g.beginPath();
+    g.moveTo(x, -diag);
+    g.lineTo(x, diag);
+    g.stroke();
+  }
+  g.restore();
+  g.putImageData(zeroGB(g.getImageData(0, 0, MASK_W, MASK_H)), 0, 0);
+  return new THREE.CanvasTexture(c);
+}
+
+function makeSunburstMask(): THREE.Texture {
+  const c = document.createElement("canvas");
+  c.width = MASK_W;
+  c.height = MASK_H;
+  const g = c.getContext("2d")!;
+  const img = g.createImageData(MASK_W, MASK_H);
+  const d = img.data;
+  const cx = MASK_W / 2;
+  const cy = MASK_H / 2;
+  const rays = 40;
+  for (let y = 0; y < MASK_H; y++) {
+    for (let x = 0; x < MASK_W; x++) {
+      const i = (y * MASK_W + x) * 4;
+      // Normalize by each half-axis so rays radiate as true circles despite
+      // the card's non-square aspect, instead of stretching into an ellipse.
+      const dx = (x - cx) / (MASK_W / 2);
+      const dy = (y - cy) / (MASK_H / 2);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx);
+      const ray = (Math.sin(angle * rays) + 1) / 2;
+      const core = Math.max(0, 1 - dist * 3.2);
+      const v = Math.min(1, Math.max(ray * (1 - Math.min(1, dist)), core));
+      d[i] = Math.round(v * 255);
+      d[i + 1] = 0;
+      d[i + 2] = 0;
+      d[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(c);
+}
+
+function makeHoloMaskTextures(): Record<HoloPattern, THREE.Texture> {
+  const textures = {
+    none: makeBlankMask(),
+    cosmos: makeCosmosMask(),
+    stripes: makeStripesMask(),
+    sunburst: makeSunburstMask(),
+  };
+  // Repeat wrapping so uMaskScale (see HOLO_FRAGMENT_SHADER) can tile these
+  // finer than 1:1 instead of clamping/stretching at the texture edges.
+  for (const key of ["cosmos", "stripes", "sunburst"] as const) {
+    textures[key].wrapS = THREE.RepeatWrapping;
+    textures[key].wrapT = THREE.RepeatWrapping;
+  }
+  return textures;
+}
+
 // The holo overlay: a second mesh, same geometry as the card, sitting a
 // hair in front and additively blended on top. Rotates hue by view angle
 // (dot of surface normal and view direction) plus a diagonal sweep across
@@ -293,6 +503,10 @@ const HOLO_FRAGMENT_SHADER = `
   uniform float uIntensity;
   uniform float uTiltX;
   uniform float uTiltY;
+  uniform float uBandWidth;
+  uniform float uMaskScale;
+  uniform float uSparkleFreqScale;
+  uniform sampler2D uHoloMask;
 
   vec3 hsv2rgb(vec3 c) {
     vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
@@ -322,7 +536,42 @@ const HOLO_FRAGMENT_SHADER = `
     vec3 rainbow = hsv2rgb(vec3(hue, 0.8, 1.0));
     float sparkle = 0.85 + 0.15 * sin(vUv.x * 37.0 + vUv.y * 29.0 + uTime * 0.6);
     float tiltMag = clamp(abs(uTiltX) + abs(uTiltY), 0.0, 1.0);
-    float alpha = uIntensity * (0.26 + 0.45 * (1.0 - ndotv) + 0.2 * tiltMag) * sparkle;
+    // Mask is sampled at the plain (non-parallax) UV — it's a stencil baked
+    // fixed to the card, unlike the rainbow pattern that slides above it.
+    // G/B (only meaningful for the cosmos pattern — see makeCosmosMask) pack
+    // a per-fleck random frequency/phase so individual sparkles flicker in
+    // and out independently as the tilt angle changes, instead of the whole
+    // mask brightening/dimming as one flat layer — each fleck only lights up
+    // when its own sine wave over the tilt angle crosses a threshold, so
+    // rotating the card continuously reveals a different subset each moment.
+    // uMaskScale zooms the mask sample around the card's center — >1 tiles
+    // it smaller/denser, <1 zooms in for bigger shapes (mirrors the
+    // reference shader graph's _Holo_Density UV-scale property).
+    vec2 maskUv = (vUv - 0.5) * uMaskScale + 0.5;
+    vec4 maskSample = texture2D(uHoloMask, maskUv);
+    float baseMask = maskSample.r;
+    float isFleck = step(0.001, maskSample.g + maskSample.b);
+    float freq = (1.0 + maskSample.g * 6.0) * uSparkleFreqScale;
+    float phase = maskSample.b * 6.2831853;
+    float tiltAngle = atan(uTiltY, uTiltX);
+    float twinkle = sin(tiltAngle * freq + phase) * 0.5 + 0.5;
+    float flicker = smoothstep(0.55, 1.0, twinkle);
+    float angleDriven = smoothstep(0.02, 0.15, length(vec2(uTiltX, uTiltY)));
+    float fleckGate = mix(0.35, flicker, angleDriven);
+    float maskVal = baseMask * mix(1.0, fleckGate, isFleck);
+
+    // Real foil holo isn't visible everywhere at once — it's a bright glare
+    // band that sweeps across the surface as the viewing angle changes,
+    // with the rest of the card reading close to plain. cardDiag (fixed to
+    // the card, unlike the parallax-offset diag above) is position along
+    // the card's diagonal; the band's center is driven by tilt so it
+    // visibly travels across the surface as the card rotates, instead of
+    // the whole card lighting up uniformly.
+    float cardDiag = (vUv.x + vUv.y) * 0.5;
+    float bandCenter = 0.5 - uTiltX * 0.55 - uTiltY * 0.4;
+    float band = 1.0 - smoothstep(0.0, uBandWidth, abs(cardDiag - bandCenter));
+
+    float alpha = uIntensity * (0.03 + 0.95 * band * (0.6 + 0.4 * (1.0 - ndotv) + 0.2 * tiltMag)) * sparkle * maskVal;
     gl_FragColor = vec4(rainbow, clamp(alpha, 0.0, 1.0));
   }
 `;
@@ -350,7 +599,7 @@ function applyCrop(texture: THREE.Texture, crop: Crop, imgAspect: number) {
   texture.needsUpdate = true;
 }
 
-export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card3DProps) {
+export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, overrides }: Card3DProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dead = useRef(false);
   const raf = useRef<number | null>(null);
@@ -367,6 +616,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card
   const holoMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
   const holoMeshRef = useRef<THREE.Mesh | null>(null);
   const foilNormalRef = useRef<THREE.Texture | null>(null);
+  const holoMaskTexturesRef = useRef<Record<HoloPattern, THREE.Texture> | null>(null);
   const baseTiltRef = useRef({ x: BASE_TILT_X, y: BASE_TILT_Y });
 
   // Renders immediately rather than waiting for the next rAF tick, so a prop
@@ -472,10 +722,21 @@ export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card
     // every frame for free, offset a hair along local Z so it sits visually
     // in front without z-fighting. Hidden until a holo-tier card sets its
     // intensity above 0 (see the rarity/holo effect below).
+    const holoMaskTextures = makeHoloMaskTextures();
+    holoMaskTexturesRef.current = holoMaskTextures;
     const holoMaterial = new THREE.ShaderMaterial({
       vertexShader: HOLO_VERTEX_SHADER,
       fragmentShader: HOLO_FRAGMENT_SHADER,
-      uniforms: { uTime: { value: 0 }, uIntensity: { value: 0 }, uTiltX: { value: 0 }, uTiltY: { value: 0 } },
+      uniforms: {
+        uTime: { value: 0 },
+        uIntensity: { value: 0 },
+        uTiltX: { value: 0 },
+        uTiltY: { value: 0 },
+        uBandWidth: { value: HOLO_BAND_WIDTH },
+        uMaskScale: { value: HOLO_PATTERN_SCALE },
+        uSparkleFreqScale: { value: HOLO_SPARKLE_FREQ },
+        uHoloMask: { value: holoMaskTextures.none },
+      },
       transparent: true,
       depthWrite: false,
       depthTest: false,
@@ -549,12 +810,14 @@ export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card
       rimLightRef.current = null;
       holoMaterialRef.current = null;
       holoMeshRef.current = null;
+      holoMaskTexturesRef.current = null;
       material.dispose();
       holoMaterial.dispose();
       geometry.dispose();
       env.dispose();
       foilNormalRef.current?.dispose();
       foilNormalRef.current = null;
+      Object.values(holoMaskTextures).forEach((t) => t.dispose());
       renderer.dispose();
       if (renderer.domElement.parentNode) renderer.domElement.remove();
     };
@@ -631,6 +894,15 @@ export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card
     renderNow();
   }, [rarity, holo]);
 
+  // Swap which mask texture the holo overlay's alpha is stenciled through.
+  useEffect(() => {
+    const holoMaterial = holoMaterialRef.current;
+    const textures = holoMaskTexturesRef.current;
+    if (!holoMaterial || !textures) return;
+    holoMaterial.uniforms.uHoloMask.value = textures[holoPattern ?? "none"];
+    renderNow();
+  }, [holoPattern]);
+
   // Debug-panel overrides — applied after the rarity/holo defaults above so
   // they always win. Each field is independently optional: only sliders the
   // panel actually renders (and the user has touched) affect anything.
@@ -660,6 +932,15 @@ export default function Card3D({ photoUrl, crop, rarity, holo, overrides }: Card
     if (overrides.holoStrength !== undefined) {
       if (holoMaterialRef.current) holoMaterialRef.current.uniforms.uIntensity.value = overrides.holoStrength;
       if (holoMeshRef.current) holoMeshRef.current.visible = overrides.holoStrength > 0;
+    }
+    if (overrides.holoBandWidth !== undefined && holoMaterialRef.current) {
+      holoMaterialRef.current.uniforms.uBandWidth.value = overrides.holoBandWidth;
+    }
+    if (overrides.holoPatternScale !== undefined && holoMaterialRef.current) {
+      holoMaterialRef.current.uniforms.uMaskScale.value = overrides.holoPatternScale;
+    }
+    if (overrides.holoSparkleFreq !== undefined && holoMaterialRef.current) {
+      holoMaterialRef.current.uniforms.uSparkleFreqScale.value = overrides.holoSparkleFreq;
     }
     renderNow();
   }, [overrides, rarity, holo]);

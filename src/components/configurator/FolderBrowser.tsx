@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 export interface Entry {
@@ -16,9 +17,10 @@ interface BrowseResponse {
 
 interface FolderBrowserProps {
   onSelectImage: (entry: Entry) => void;
+  selectedPath?: string | null;
 }
 
-export default function FolderBrowser({ onSelectImage }: FolderBrowserProps) {
+export default function FolderBrowser({ onSelectImage, selectedPath }: FolderBrowserProps) {
   const [dir, setDir] = useState<string | null>(null); // null = default (Desktop)
   const [data, setData] = useState<BrowseResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +47,8 @@ export default function FolderBrowser({ onSelectImage }: FolderBrowserProps) {
       cancelled = true;
     };
   }, [dir]);
+
+  const images = data?.entries.filter((entry) => entry.type === "image") ?? [];
 
   return (
     <div className="cfg-panel cfg-browser">
@@ -77,17 +81,42 @@ export default function FolderBrowser({ onSelectImage }: FolderBrowserProps) {
             .. up
           </button>
         )}
-        {data?.entries.map((entry) => (
-          <button
-            key={entry.path}
-            className={`cfg-file-row cfg-file-row--${entry.type}`}
-            onClick={() => (entry.type === "dir" ? setDir(entry.path) : onSelectImage(entry))}
-          >
-            {entry.name}
-          </button>
-        ))}
+        {data?.entries
+          .filter((entry) => entry.type === "dir")
+          .map((entry) => (
+            <button
+              key={entry.path}
+              className="cfg-file-row cfg-file-row--dir"
+              onClick={() => setDir(entry.path)}
+            >
+              {entry.name}
+            </button>
+          ))}
         {data && data.entries.length === 0 && <p className="cfg-empty">Empty folder.</p>}
       </div>
+      {images.length > 0 && (
+        <div className="cfg-image-grid">
+          {images.map((entry) => (
+            <button
+              key={entry.path}
+              type="button"
+              className={`cfg-image-thumb${entry.path === selectedPath ? " cfg-image-thumb--active" : ""}`}
+              onClick={() => onSelectImage(entry)}
+              title={entry.name}
+            >
+              <Image
+                src={`/api/local-image?path=${encodeURIComponent(entry.path)}`}
+                alt={entry.name}
+                fill
+                unoptimized
+                sizes="120px"
+                style={{ objectFit: "cover" }}
+              />
+              <span className="cfg-image-thumb-name">{entry.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

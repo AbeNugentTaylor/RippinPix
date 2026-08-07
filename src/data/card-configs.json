@@ -1,20 +1,54 @@
 {
-  "nature/1": {
-    "designId": "nature",
+  "euro/1": {
+    "designId": "euro",
     "local": 1,
     "fileName": "01.jpg",
-    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\DSC_0300.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\ViennaGold-8.jpg",
     "crop": {
       "x": 50,
-      "y": 45,
+      "y": 50,
       "zoom": 1
     },
-    "rarity": "holo",
-    "holo": true,
+    "rarity": "uncommon",
+    "holo": false,
     "attributes": [],
-    "title": "Mountain waterfall",
-    "date": "2024",
-    "medium": "Archival pigment print",
-    "updatedAt": "2026-08-04T19:09:13.447Z"
+    "date": "2023",
+    "medium": "Film - Kodak Gold",
+    "updatedAt": "2026-08-06T01:48:58.856Z"
+  },
+  "sh/1": {
+    "designId": "sh",
+    "local": 1,
+    "fileName": "01.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\ShangPurp-9.jpg",
+    "crop": {
+      "x": 23.030340021306817,
+      "y": 86.23054911079521,
+      "zoom": 1
+    },
+    "rarity": "uncommon",
+    "holo": false,
+    "attributes": [],
+    "title": "Something Something Bull, Something Something Horns",
+    "medium": "Film - Lomo Purple",
+    "updatedAt": "2026-08-06T01:55:37.054Z"
+  },
+  "hk/1": {
+    "designId": "hk",
+    "local": 1,
+    "fileName": "01.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\World Tour   20-2.jpg",
+    "crop": {
+      "x": 42.42426091974431,
+      "y": 87.09830262855516,
+      "zoom": 1.65
+    },
+    "rarity": "common",
+    "holo": false,
+    "attributes": [],
+    "title": "The Rain in Hong Kong Falls Mainly on the...",
+    "date": "2023",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-06T01:57:25.280Z"
   }
 }

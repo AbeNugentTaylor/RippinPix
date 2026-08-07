@@ -33,7 +33,13 @@ export default function CardLightbox({ card, onClose }: CardLightboxProps) {
         Close
       </button>
       <div className="lightbox-card-frame" onClick={(e) => e.stopPropagation()}>
-        <Card3D photoUrl={card.photoUrl} crop={card.crop} rarity={card.rarity} holo={card.holo} />
+        <Card3D
+          photoUrl={card.photoUrl}
+          crop={card.crop}
+          rarity={card.rarity}
+          holo={card.holo}
+          holoPattern={card.holoPattern}
+        />
         <CardCaptionOverlay card={card} />
       </div>
     </div>

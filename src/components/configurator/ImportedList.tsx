@@ -1,15 +1,22 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
+import CardLightbox from "@/components/CardLightbox";
+import { configToPreviewCard } from "@/lib/preview-card";
 import type { CardConfig } from "@/lib/types";
 
 interface ImportedListProps {
   configs: Record<string, CardConfig>;
+  editingKey?: string | null;
+  onEdit: (key: string) => void;
   onDeleted: () => void;
 }
 
-export default function ImportedList({ configs, onDeleted }: ImportedListProps) {
+export default function ImportedList({ configs, editingKey, onEdit, onDeleted }: ImportedListProps) {
   const entries = Object.entries(configs).sort(([a], [b]) => a.localeCompare(b));
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const previewCard = previewKey && configs[previewKey] ? configToPreviewCard(previewKey, configs[previewKey]) : null;
 
   const remove = async (key: string) => {
     await fetch(`/api/card-config?key=${encodeURIComponent(key)}`, { method: "DELETE" });
@@ -22,7 +29,19 @@ export default function ImportedList({ configs, onDeleted }: ImportedListProps) 
       <div className="cfg-imported-list">
         {entries.length === 0 && <p className="cfg-empty">Nothing saved yet.</p>}
         {entries.map(([key, config]) => (
-          <div className="cfg-imported-row" key={key}>
+          <div
+            className={`cfg-imported-row${key === editingKey ? " cfg-imported-row--active" : ""}`}
+            key={key}
+            role="button"
+            tabIndex={0}
+            onClick={() => onEdit(key)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onEdit(key);
+              }
+            }}
+          >
             <div className="cfg-imported-thumb">
               <Image
                 src={`/photos/${config.designId}/${config.fileName}`}
@@ -44,12 +63,30 @@ export default function ImportedList({ configs, onDeleted }: ImportedListProps) 
               </span>
               <span>{config.title}</span>
             </div>
-            <button type="button" onClick={() => remove(key)}>
-              Remove
-            </button>
+            <div className="cfg-imported-actions">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewKey(key);
+                }}
+              >
+                View
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove(key);
+                }}
+              >
+                Remove
+              </button>
+            </div>
           </div>
         ))}
       </div>
+      <CardLightbox card={previewCard} onClose={() => setPreviewKey(null)} />
     </div>
   );
 }
