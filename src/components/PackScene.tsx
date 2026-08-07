@@ -1273,13 +1273,24 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
   function onUp(e: PointerEvent) {
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
+    // A finger has noticeably more incidental wobble than a mouse click, so
+    // the same 8px tolerance that works for a mouse click was rejecting real
+    // taps as drags on a touchscreen.
+    const moveTolerance = e.pointerType === "touch" ? 18 : 8;
     const quick =
       performance.now() - t0Ref.current < 340 &&
-      Math.abs((e && e.clientX != null ? e.clientX : downX.current) - downX.current) < 8;
+      Math.abs((e && e.clientX != null ? e.clientX : downX.current) - downX.current) < moveTolerance;
     const ph = phaseRef.current;
     if (ph === "bin") {
-      const isTouch = e.pointerType === "touch";
-      if (quick && hoverId.current && (!isTouch || tapWasArmed.current)) {
+      // hoverId drifts every frame off whatever the continuous raycast in
+      // loop() currently sees, which on a real touchscreen keeps nudging
+      // during a "still" tap from finger jitter/micro-movement — by release
+      // it can point at a neighboring pack or nothing at all. armedId only
+      // ever changes on a fresh pointerdown, so it's the stable value that
+      // actually matches what got armed at the start of this tap.
+      if (e.pointerType === "touch") {
+        if (quick && tapWasArmed.current && armedId.current) pickPack(armedId.current);
+      } else if (quick && hoverId.current) {
         pickPack(hoverId.current);
       }
       return;
