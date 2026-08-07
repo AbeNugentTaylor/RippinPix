@@ -849,8 +849,20 @@ a:hover {
 }
 
 .credits {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-4);
   max-width: 1500px;
   margin: var(--space-8) auto 0;
   font-size: 11px;
   color: var(--color-neutral-500);
+}
+
+.credits > span:first-child {
+  min-width: 0;
+}
+
+.credits > span:last-child {
+  flex-shrink: 0;
 }

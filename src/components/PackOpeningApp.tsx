@@ -8,6 +8,7 @@ import { DESIGNS, PACKS, PER_PACK, plateAt } from "@/lib/designs";
 import { configKey } from "@/lib/card-key";
 import { preloadImage } from "@/lib/preload-image";
 import type { Card, CardConfig, Pack, Phase } from "@/lib/types";
+import pkg from "../../package.json";
 
 const SHOP_NAME = "RippinPix";
 const PACK_PRICE = "Free";
@@ -258,8 +259,11 @@ export default function PackOpeningApp({ photoManifest, cardConfigs }: PackOpeni
       <CardLightbox card={selectedCard} onClose={() => setSelectedCard(null)} />
 
       <footer className="credits">
-        Booster pack 3D model — &ldquo;Booster Pack (TCG Pack)&rdquo; by Hasan Ajami, via Sketchfab,
-        licensed CC BY 4.0.
+        <span>
+          Booster pack 3D model — &ldquo;Booster Pack (TCG Pack)&rdquo; by Hasan Ajami, via Sketchfab,
+          licensed CC BY 4.0.
+        </span>
+        <span>v{pkg.version}</span>
       </footer>
     </div>
   );
