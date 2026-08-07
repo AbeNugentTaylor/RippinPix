@@ -24,9 +24,14 @@ Two independent pieces, both driven by rarity tier (`common` → `secret`):
    moved (cosine is ~flat near 0°, so a card that only tilts a few degrees produced almost no hue
    shift). Also has a parallax UV offset (`vUv + tilt * 0.22`) so the pattern visibly slides as a
    floating layer, and glare alpha grows slightly with tilt magnitude.
-2. **Etched foil bump** — `makeFoilNormalMap()` procedurally bakes a tiled diagonal-ridge pattern
-   straight to a normal map (no real heightmap, since three.js only needs the normal map itself),
-   wired into the base `MeshPhysicalMaterial.normalMap` + a per-rarity `NORMAL_SCALE` table.
+2. **Etched foil bump** — `loadFoilNormalMap()` bakes a real cosmos-holofoil reference photo
+   (`public/holo-mask.png`, user-provided) into a normal map by reading its luminance as height and
+   taking the gradient (async — the image loads at mount, `foilNormalRef` holds the result once
+   ready), wired into the base `MeshPhysicalMaterial.normalMap` + a per-rarity `NORMAL_SCALE` table.
+   As of 2026-08-07 this only activates when `holoPattern === "cosmos"` (see "Holo Mask" below) —
+   it's that pattern's whole distinguishing look now, not a generic always-on holo texture. An
+   earlier version (`makeFoilNormalMap()`) procedurally synthesized a diagonal-ridge pattern instead
+   of using a real photo, and applied unconditionally to every holo-tier card regardless of pattern.
 
 Both replaced an earlier attempt using `MeshPhysicalMaterial`'s built-in PBR `iridescence`
 property, which turned out to be a dead end: reading three.js's own shader source
@@ -123,6 +128,23 @@ defaults as module constants, same pattern as `HOLO_BAND_WIDTH`):
   original range meant even a ~30° pointer swing could push a fleck's `sin()` argument through more
   than a full cycle — the actual cause of the "flashes too fast" complaint, not just a matter of
   taste.
+
+**Cosmos: procedural mask replaced by the real reference photo (2026-08-07).** The `HoloMask3.png`
+equivalent — the user's own photographed cosmos-foil card — turned out to *not* be "art reference
+only, nothing to port" as assumed above. It's now the actual texture source: `loadFoilNormalMap()`
+(see "Etched foil bump" above) bakes it straight into a normal map, and selecting `"cosmos"` in the
+pattern dropdown activates that bump instead of any mask. `makeCosmosMask()` (the hard-edged
+fleck/dust generator from the two follow-ups below) is removed — the `"cosmos"` entry in
+`makeHoloMaskTextures()` now just reuses the blank/unmasked texture, same as `"none"`, since the
+distinguishing look comes entirely from the physical bump (specular highlights) rather than a
+rainbow-color stencil. `FleckShape`/`fleckContains`/the per-fleck G/B flicker-packing described in
+the two sections immediately below are dead as far as `"cosmos"` goes; the flicker *gate* math
+still lives in `HOLO_FRAGMENT_SHADER` (harmless no-op when G=B=0, which every remaining mask sets)
+in case `"stripes"`/`"sunburst"` ever want per-shape flicker later — nothing currently populates it.
+Rationale for photo-over-procedural: the reference image *is* the classic Pokémon "cosmos
+holofoil" pattern, so using it directly is more authentic than re-deriving an approximation of it in
+code, and it also means the bump automatically has real photographic irregularity (varied cluster
+density, uneven speckle) that's hard to fake procedurally without a lot more tuning.
 
 Next step if picking this back up: `_Holo_Color_Ramp` (see above) is probably the highest-value
 remaining item — a real gradient texture instead of raw HSV rotation.

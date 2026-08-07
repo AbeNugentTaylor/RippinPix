@@ -163,9 +163,10 @@ export const HOLO_BAND_WIDTH = 0.34;
 // docs/holo-shader-notes.md).
 export const HOLO_PATTERN_SCALE = 1;
 
-// Multiplies the cosmos mask's per-fleck flicker frequency (itself packed
-// per-shape into the mask texture — see makeCosmosMask). Lower = calmer,
-// slower flicker for the same pointer movement; higher = twitchier.
+// Multiplies a mask's per-fleck flicker frequency, for masks that pack a
+// per-shape frequency/phase into their G/B channels (see the "Channel
+// layout" comment above MASK_W) — nothing currently does; kept for a future
+// mask that wants it. Lower = calmer, slower flicker; higher = twitchier.
 export const HOLO_SPARKLE_FREQ = 1;
 
 // A 63:88 plane with rounded corners (real cards aren't sharp-cornered
@@ -293,21 +294,22 @@ function loadFoilNormalMap(url: string): Promise<THREE.Texture> {
 // straight at vUv (fixed to the card) rather than the rainbow's own
 // parallax-shifted UV, so the pattern itself stays put while the color
 // slides across it. Ported from the named `_Holo_Mask` textures in the
-// reference shader graph (see docs/holo-shader-notes.md) — "cosmos" is a
-// dot/nebula field, "stripes" a diagonal foil pattern, "sunburst" rays from a
-// bright core. Generated procedurally rather than importing the reference
-// PNGs (Unity assets of unclear license, baked at the wrong aspect for this
-// card).
+// reference shader graph (see docs/holo-shader-notes.md) — "stripes" is a
+// diagonal foil pattern, "sunburst" rays from a bright core. Generated
+// procedurally rather than importing the reference PNGs (Unity assets of
+// unclear license, baked at the wrong aspect for this card). "cosmos" isn't
+// a mask at all — it reuses the blank (unmasked) texture and instead drives
+// loadFoilNormalMap's image-based bump (see the rarity/holo/holoPattern
+// effect below), since it's sourced from a real cosmos-holofoil photo rather
+// than a synthesized stencil.
 //
 // Channel layout: R is the visibility mask HOLO_FRAGMENT_SHADER multiplies
-// into alpha, same as a plain grayscale mask. G/B are only meaningful for
-// "cosmos": a per-fleck random frequency/phase pair, packed in so each
-// sparkle can flicker in and out independently as the view angle changes
-// (see the sparkle-gate math in HOLO_FRAGMENT_SHADER) instead of the whole
-// mask fading as one flat layer. Every other mask must keep G=B=0 so the
-// shader treats it as "always on" rather than reading garbage into that gate
-// — canvas draw calls (fillRect/stroke) write equal R/G/B for white, so
-// those masks explicitly zero G/B after drawing.
+// into alpha, same as a plain grayscale mask. G/B are reserved for a
+// per-fleck random frequency/phase pair (see the sparkle-gate math in
+// HOLO_FRAGMENT_SHADER) that no current mask populates — every mask here
+// keeps G=B=0 so the shader treats it as "always on" rather than reading
+// garbage into that gate — canvas draw calls (fillRect/stroke) write equal
+// R/G/B for white, so those masks explicitly zero G/B after drawing.
 const MASK_W = 256;
 const MASK_H = Math.round(MASK_W * (PLANE_H / PLANE_W));
 
@@ -328,78 +330,6 @@ function makeBlankMask(): THREE.Texture {
   const img = g.createImageData(1, 1);
   img.data[0] = 255;
   img.data[3] = 255;
-  g.putImageData(img, 0, 0);
-  return new THREE.CanvasTexture(c);
-}
-
-type FleckShape = "circle" | "square" | "diamond" | "cross";
-const FLECK_SHAPES: FleckShape[] = ["circle", "square", "diamond", "cross"];
-
-// Hard-edged (no soft falloff) membership test — real foil glitter reads as
-// crisp cut facets, not airbrushed blobs.
-function fleckContains(shape: FleckShape, dx: number, dy: number, r: number): boolean {
-  switch (shape) {
-    case "circle":
-      return dx * dx + dy * dy <= r * r;
-    case "square":
-      return Math.abs(dx) <= r && Math.abs(dy) <= r;
-    case "diamond":
-      return Math.abs(dx) + Math.abs(dy) <= r;
-    case "cross": {
-      const thin = Math.max(1, r * 0.3);
-      return (Math.abs(dx) <= thin || Math.abs(dy) <= thin) && Math.max(Math.abs(dx), Math.abs(dy)) <= r;
-    }
-  }
-}
-
-function makeCosmosMask(): THREE.Texture {
-  const c = document.createElement("canvas");
-  c.width = MASK_W;
-  c.height = MASK_H;
-  const g = c.getContext("2d")!;
-  const img = g.createImageData(MASK_W, MASK_H);
-  const d = img.data;
-
-  // Fine dust: dense, single-pixel, always-on grain (G=B=0, so the shader's
-  // sparkle-flicker gate leaves it alone) — the constant noise floor real
-  // holo foil has even where no distinct glint is catching the light.
-  const dustCount = 1400;
-  for (let i = 0; i < dustCount; i++) {
-    const x = Math.floor(Math.random() * MASK_W);
-    const y = Math.floor(Math.random() * MASK_H);
-    const idx = (y * MASK_W + x) * 4;
-    const v = Math.round(70 + Math.random() * 185);
-    if (v > d[idx]) d[idx] = v;
-    d[idx + 3] = 255;
-  }
-
-  // Sparkle flecks: hard-edged shapes, sizes skewed small with a few larger
-  // ones, each stamped with its own random frequency/phase so it flickers
-  // independently (see HOLO_FRAGMENT_SHADER's sparkle gate).
-  const fleckCount = 190;
-  for (let i = 0; i < fleckCount; i++) {
-    const cx = Math.random() * MASK_W;
-    const cy = Math.random() * MASK_H;
-    const r = Math.random() < 0.85 ? 2 + Math.random() * 3.5 : 7 + Math.random() * 9;
-    const shape = FLECK_SHAPES[Math.floor(Math.random() * FLECK_SHAPES.length)];
-    const freqByte = Math.floor(Math.random() * 256);
-    const phaseByte = Math.floor(Math.random() * 256);
-    const minX = Math.max(0, Math.floor(cx - r));
-    const maxX = Math.min(MASK_W - 1, Math.ceil(cx + r));
-    const minY = Math.max(0, Math.floor(cy - r));
-    const maxY = Math.min(MASK_H - 1, Math.ceil(cy + r));
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = minX; x <= maxX; x++) {
-        if (!fleckContains(shape, x - cx, y - cy, r)) continue;
-        const idx = (y * MASK_W + x) * 4;
-        d[idx] = 255;
-        d[idx + 1] = freqByte;
-        d[idx + 2] = phaseByte;
-        d[idx + 3] = 255;
-      }
-    }
-  }
-
   g.putImageData(img, 0, 0);
   return new THREE.CanvasTexture(c);
 }
@@ -463,7 +393,9 @@ function makeSunburstMask(): THREE.Texture {
 function makeHoloMaskTextures(): Record<HoloPattern, THREE.Texture> {
   const textures = {
     none: makeBlankMask(),
-    cosmos: makeCosmosMask(),
+    // "cosmos" is unmasked (see the comment above MASK_W) — its distinct
+    // look comes entirely from loadFoilNormalMap's image-based bump instead.
+    cosmos: makeBlankMask(),
     stripes: makeStripesMask(),
     sunburst: makeSunburstMask(),
   };
@@ -538,12 +470,12 @@ const HOLO_FRAGMENT_SHADER = `
     float tiltMag = clamp(abs(uTiltX) + abs(uTiltY), 0.0, 1.0);
     // Mask is sampled at the plain (non-parallax) UV — it's a stencil baked
     // fixed to the card, unlike the rainbow pattern that slides above it.
-    // G/B (only meaningful for the cosmos pattern — see makeCosmosMask) pack
-    // a per-fleck random frequency/phase so individual sparkles flicker in
-    // and out independently as the tilt angle changes, instead of the whole
-    // mask brightening/dimming as one flat layer — each fleck only lights up
-    // when its own sine wave over the tilt angle crosses a threshold, so
-    // rotating the card continuously reveals a different subset each moment.
+    // G/B would pack a per-fleck random frequency/phase so individual
+    // sparkles flicker in and out independently as the tilt angle changes,
+    // instead of the whole mask brightening/dimming as one flat layer — each
+    // fleck only lights up when its own sine wave over the tilt angle
+    // crosses a threshold. No current mask populates G/B (see the "Channel
+    // layout" comment above MASK_W), so this is a no-op today.
     // uMaskScale zooms the mask sample around the card's center — >1 tiles
     // it smaller/denser, <1 zooms in for bigger shapes (mirrors the
     // reference shader graph's _Holo_Density UV-scale property).
@@ -877,7 +809,12 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     material.envMapIntensity = active ? ENV_INTENSITY[tier] : ENV_INTENSITY.common;
     material.ior = active ? IOR[tier] : IOR.common;
     material.roughness = active ? ROUGHNESS[tier] : ROUGHNESS.common;
-    const normalScale = active ? NORMAL_SCALE[tier] : NORMAL_SCALE.common;
+    // The image-based etched-foil bump (see loadFoilNormalMap) is the
+    // "cosmos" pattern's whole distinguishing look, not a generic holo
+    // texture — so it only kicks in when that pattern is actually selected,
+    // same as the stripes/sunburst masks only show up when picked.
+    const bumpActive = active && holoPattern === "cosmos";
+    const normalScale = bumpActive ? NORMAL_SCALE[tier] : 0;
     material.normalScale.set(normalScale, normalScale);
     if (active && tier === "secret") {
       material.emissive = new THREE.Color("#3a2c00");
@@ -892,7 +829,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     if (holoMaterial) holoMaterial.uniforms.uIntensity.value = strength;
     if (holoMesh) holoMesh.visible = strength > 0;
     renderNow();
-  }, [rarity, holo]);
+  }, [rarity, holo, holoPattern]);
 
   // Swap which mask texture the holo overlay's alpha is stenciled through.
   useEffect(() => {
