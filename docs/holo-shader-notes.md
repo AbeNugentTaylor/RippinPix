@@ -131,9 +131,10 @@ defaults as module constants, same pattern as `HOLO_BAND_WIDTH`):
 
 **Cosmos: procedural mask replaced by the real reference photo (2026-08-07).** The `HoloMask3.png`
 equivalent — the user's own photographed cosmos-foil card — turned out to *not* be "art reference
-only, nothing to port" as assumed above. It's now the actual texture source: `loadFoilNormalMap()`
-(see "Etched foil bump" above) bakes it straight into a normal map, and selecting `"cosmos"` in the
-pattern dropdown activates that bump instead of any mask. `makeCosmosMask()` (the hard-edged
+only, nothing to port" as assumed above. It's now the actual texture source: `loadCosmosTextures()`
+(see "Etched foil bump" above, and the follow-up note right below this one — the bump alone didn't
+stay the whole story) bakes it into a normal map, and selecting `"cosmos"` in the pattern dropdown
+activates that bump. `makeCosmosMask()` (the hard-edged
 fleck/dust generator from the two follow-ups below) is removed — the `"cosmos"` entry in
 `makeHoloMaskTextures()` now just reuses the blank/unmasked texture, same as `"none"`, since the
 distinguishing look comes entirely from the physical bump (specular highlights) rather than a
@@ -145,6 +146,29 @@ Rationale for photo-over-procedural: the reference image *is* the classic Pokém
 holofoil" pattern, so using it directly is more authentic than re-deriving an approximation of it in
 code, and it also means the bump automatically has real photographic irregularity (varied cluster
 density, uneven speckle) that's hard to fake procedurally without a lot more tuning.
+
+**Cosmos: bump-only was invisible, added a mask back (2026-08-07, follow-up).** The bump-only design
+above turned out to be a dead end in practice, discovered by diffing screenshots of `"none"` vs
+`"cosmos"` at identical tilt/lighting: under real default settings (default light rig, rainbow
+overlay at its normal strength) the two were visually indistinguishable — only ~6% of pixels
+differed by any meaningful amount, max single-pixel delta 52/255. Tripling the bump strength
+(normal-map gradient multiplier 90→260, `NORMAL_SCALE` roughly doubled) barely helped (74/255 max) —
+a sublinear response, because `MeshPhysicalMaterial`'s specular/clearcoat highlight only reads at
+all in a narrow light-direction/tilt sweet-spot (confirmed by cranking key/rim lights to 2.5 and
+zeroing ambient — *then* it clearly showed the star pattern, see the git history around this note for
+the isolated test). **Don't try to push the bump-only approach further** — it's fighting a low
+visual ceiling in this specific light rig, not a tuning problem.
+
+Fix: `loadFoilNormalMap()` (renamed `loadCosmosTextures()`) now also derives a *mask* from the same
+photo — R channel = a sigmoid-contrast-boosted version of the image's own luminance, centered on the
+image's own mean brightness (`alphaFor = 1/(1+exp(-14*(v - mean*1.3)))`) so only the brighter
+sparkle clusters pass through, not the whole card. That mask replaces the placeholder blank texture
+`"cosmos"` was pointing at (loads async, swaps into the live `uHoloMask` uniform if `"cosmos"` is
+already selected when it resolves) and uses the exact same stencil mechanism `"stripes"`/`"sunburst"`
+already use — which doesn't depend on lighting angle at all, so it reads clearly regardless of tilt.
+Same before/after diff test after this fix: ~41% of pixels differ meaningfully, max delta 150/255,
+and the amplified diff image visibly shows the actual star/cross cluster shapes from the reference
+photo. The bump is kept as a secondary physical-depth layer on top of the mask, not removed.
 
 Next step if picking this back up: `_Holo_Color_Ramp` (see above) is probably the highest-value
 remaining item — a real gradient texture instead of raw HSV rotation.
