@@ -32,6 +32,12 @@ const XMAX = 2.12;
 const HOVER_LIFT_Y = 5;
 const HOVER_LIFT_Z = -2;
 const HOVER_SCALE = 1.12;
+// Touch has no hover-before-commit, so a tap arms a pack (lifts it, stays up)
+// and a second tap confirms — the lift needs to read clearly at a glance on a
+// small screen, hence the bigger multiplier over the desktop hover values.
+const HOVER_LIFT_Y_TOUCH = HOVER_LIFT_Y * 1.6;
+const HOVER_LIFT_Z_TOUCH = HOVER_LIFT_Z * 1.6;
+const HOVER_SCALE_TOUCH = 1 + (HOVER_SCALE - 1) * 1.6;
 const MODEL_URL = "/models/booster_pack_tcg_pack.glb";
 
 interface DressedGroup {
@@ -160,6 +166,12 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
   const rayRef = useRef<THREE.Raycaster | null>(null);
   const hoverId = useRef<string | null>(null);
   const hoverBin = useRef(false);
+  // Touch selection is two-step: a tap arms/lifts a pack (armedId), a second
+  // tap on that same pack confirms it. tapWasArmed records, per pointerdown,
+  // whether the pack we just touched down on was already the armed one.
+  const armedId = useRef<string | null>(null);
+  const tapWasArmed = useRef(false);
+  const pointerIsTouch = useRef(false);
 
   const dragging = useRef(false);
   const x0 = useRef(0);
@@ -1028,6 +1040,7 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     plain.root.visible = false;
     plain.hover = 0;
     hoverId.current = null;
+    armedId.current = null;
     currentId.current = id;
 
     onPick(plain.pack);
@@ -1175,6 +1188,7 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     setProgress(0);
     rig.p = 0;
     currentId.current = null;
+    armedId.current = null;
     onEnterBin();
     slideBin(false);
     focusPack(rig, false);
@@ -1186,6 +1200,7 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
   function showBin() {
     slideBin(false);
     currentId.current = null;
+    armedId.current = null;
     onEnterBin();
     scrollStageIntoView();
     if (stageElRef.current) stageElRef.current.style.cursor = "default";
@@ -1205,9 +1220,28 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
 
   /* ---------- pointer ---------- */
 
+  // Shared by the continuous per-frame hover raycast (loop(), fed by
+  // ndc.current) and the one-off raycast a touch tap needs synchronously in
+  // onDown — a bare tap fires no pointermove beforehand, so ndc.current is
+  // stale and the continuous path alone never sees it.
+  function raycastPackAtNdc(ndcX: number, ndcY: number): string | null {
+    const cam = cameraRef.current;
+    const ray = rayRef.current;
+    const rigs = rigsRef.current;
+    if (!cam || !ray || !rigs) return null;
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
+    const targets = Object.values(rigs).filter((r) => !r.gone).map((r) => r.root);
+    const hit = ray.intersectObjects(targets, true)[0];
+    if (!hit) return null;
+    let o: THREE.Object3D | null = hit.object;
+    while (o && !o.userData.packId) o = o.parent;
+    return o ? (o.userData.packId as string) : null;
+  }
+
   function onHover(e: PointerEvent) {
     const el = stageElRef.current;
     if (!el) return;
+    pointerIsTouch.current = e.pointerType === "touch";
     const r = el.getBoundingClientRect();
     pointer.current.x = ((e.clientX - r.left) / r.width - 0.5) * 2;
     pointer.current.y = ((e.clientY - r.top) / r.height - 0.5) * 2;
@@ -1244,7 +1278,10 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
       Math.abs((e && e.clientX != null ? e.clientX : downX.current) - downX.current) < 8;
     const ph = phaseRef.current;
     if (ph === "bin") {
-      if (quick && hoverId.current) pickPack(hoverId.current);
+      const isTouch = e.pointerType === "touch";
+      if (quick && hoverId.current && (!isTouch || tapWasArmed.current)) {
+        pickPack(hoverId.current);
+      }
       return;
     }
     if (quick && hoverBin.current) {
@@ -1260,6 +1297,23 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     if (!rigsRef.current) return;
     downX.current = e.clientX;
     t0Ref.current = performance.now();
+    pointerIsTouch.current = e.pointerType === "touch";
+    if (pointerIsTouch.current && phaseRef.current === "bin") {
+      // No hover state precedes a touch tap, so arm/confirm has to be
+      // resolved right here rather than relying on the continuous raycast
+      // in loop() — a plain tap fires no pointermove beforehand.
+      const el = stageElRef.current;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        const ndcX = ((e.clientX - r.left) / r.width - 0.5) * 2;
+        const ndcY = -(((e.clientY - r.top) / r.height - 0.5) * 2);
+        const id = raycastPackAtNdc(ndcX, ndcY);
+        tapWasArmed.current = id !== null && id === armedId.current;
+        armedId.current = id;
+        hoverId.current = id;
+        el.style.cursor = id ? "pointer" : "default";
+      }
+    }
     dragging.current = phaseRef.current === "idle" && !hoverBin.current;
     if (dragging.current) {
       x0.current = e.clientX;
@@ -1320,15 +1374,7 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     const ray = rayRef.current;
     if (rigs && ray && cam) {
       if (phaseRef.current === "bin") {
-        ray.setFromCamera(ndc.current, cam);
-        const targets = Object.values(rigs).filter((r) => !r.gone).map((r) => r.root);
-        const hit = ray.intersectObjects(targets, true)[0];
-        let id: string | null = null;
-        if (hit) {
-          let o: THREE.Object3D | null = hit.object;
-          while (o && !o.userData.packId) o = o.parent;
-          if (o) id = o.userData.packId as string;
-        }
+        const id = raycastPackAtNdc(ndc.current.x, ndc.current.y);
         if (id !== hoverId.current) {
           hoverId.current = id;
           if (stageElRef.current) stageElRef.current.style.cursor = id ? "pointer" : "default";
@@ -1356,6 +1402,9 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
         hoverBin.current = false;
       }
 
+      const liftY = pointerIsTouch.current ? HOVER_LIFT_Y_TOUCH : HOVER_LIFT_Y;
+      const liftZ = pointerIsTouch.current ? HOVER_LIFT_Z_TOUCH : HOVER_LIFT_Z;
+      const liftScale = pointerIsTouch.current ? HOVER_SCALE_TOUCH : HOVER_SCALE;
       for (const p of Object.values(rigs)) {
         if (p.gone || !p.root.visible) continue;
         const target = hoverId.current === p.pack.id ? 1 : 0;
@@ -1388,15 +1437,15 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
         // unreadable when you're trying to peek at a specific pack.
         p.root.position.set(
           s.x,
-          s.y + h * HOVER_LIFT_Y + Math.sin(t * 0.7 + s.x) * 0.04,
-          s.z + h * HOVER_LIFT_Z
+          s.y + h * liftY + Math.sin(t * 0.7 + s.x) * 0.04,
+          s.z + h * liftZ
         );
         p.root.rotation.set(
           s.rx + h * (counter.rx - s.rx),
           s.ry * (1 - h),
           s.rz * (1 - h)
         );
-        p.root.scale.setScalar(1 + h * (HOVER_SCALE - 1));
+        p.root.scale.setScalar(1 + h * (liftScale - 1));
       }
     }
 

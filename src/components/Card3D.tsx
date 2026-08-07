@@ -617,6 +617,9 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     renderer.domElement.style.display = "block";
     el.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    // Otherwise a finger-drag meant to tilt the card gets read by the
+    // browser as a scroll/swipe-to-dismiss gesture instead.
+    el.style.touchAction = "none";
 
     const scene = new THREE.Scene();
     const env = makeHoloEnv();
@@ -758,16 +761,74 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       pointer.x = 0;
       pointer.y = 0;
     };
+
+    // Ambient tilt from the device's orientation sensor, layered under the
+    // pointer/touch tilt above. `active` tracks whether a drag is currently
+    // driving the tilt (or just finished a moment ago) so a real drag always
+    // wins over ambient gyro instead of the two fighting each other.
+    const gyro = { x: 0, y: 0 };
+    let hasGyro = false;
+    let active = false;
+    let activeTimeout: number | null = null;
+    const setActive = (v: boolean, delay = 0) => {
+      if (activeTimeout !== null) {
+        window.clearTimeout(activeTimeout);
+        activeTimeout = null;
+      }
+      if (delay > 0) activeTimeout = window.setTimeout(() => { active = v; }, delay);
+      else active = v;
+    };
+    const onDown = (e: PointerEvent) => {
+      setActive(true);
+      // Capturing keeps pointermove firing for the rest of this drag even
+      // once the finger crosses outside the card's own (fairly small)
+      // bounds — without it, touch tracking silently stops there.
+      if (e.pointerType === "touch") el.setPointerCapture(e.pointerId);
+    };
+    const onRelease = (e: PointerEvent) => {
+      if (e.pointerType === "touch") {
+        pointer.x = 0;
+        pointer.y = 0;
+      }
+      setActive(false, 500);
+    };
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerleave", onLeave);
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointerup", onRelease);
+    el.addEventListener("pointercancel", onRelease);
+
+    // Only where reading orientation needs no permission prompt — iOS 13+
+    // gates DeviceOrientationEvent behind a user-gesture dialog, which we
+    // deliberately don't surface here. Calibrated relative to whatever
+    // orientation the device was in when the card opened, not absolute
+    // angles, since "flat" varies with how someone is holding their phone.
+    let gyroBase: { beta: number; gamma: number } | null = null;
+    const onOrientation = (e: DeviceOrientationEvent) => {
+      if (e.beta == null || e.gamma == null) return;
+      if (!gyroBase) gyroBase = { beta: e.beta, gamma: e.gamma };
+      hasGyro = true;
+      gyro.x = Math.max(-1, Math.min(1, (e.gamma - gyroBase.gamma) / 30));
+      gyro.y = Math.max(-1, Math.min(1, (e.beta - gyroBase.beta) / 30));
+    };
+    const DOE = typeof window !== "undefined" ? window.DeviceOrientationEvent : undefined;
+    const gyroNeedsPermission =
+      !!DOE &&
+      typeof (DOE as unknown as { requestPermission?: unknown }).requestPermission === "function";
+    if (DOE && !gyroNeedsPermission) {
+      window.addEventListener("deviceorientation", onOrientation);
+    }
 
     let px = 0;
     let py = 0;
     const loop = () => {
       if (dead.current) return;
       raf.current = requestAnimationFrame(loop);
-      px += (pointer.x - px) * 0.12;
-      py += (pointer.y - py) * 0.12;
+      const useGyro = hasGyro && !active;
+      const targetX = useGyro ? gyro.x : pointer.x;
+      const targetY = useGyro ? gyro.y : pointer.y;
+      px += (targetX - px) * 0.12;
+      py += (targetY - py) * 0.12;
       const t = performance.now() / 1000;
       // BASE_TILT defaults to flat (0,0) — a slow idle sway still keeps the
       // holo overlay's hue drifting gently even without pointer interaction,
@@ -789,6 +850,11 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       observer.disconnect();
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerleave", onLeave);
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointerup", onRelease);
+      el.removeEventListener("pointercancel", onRelease);
+      window.removeEventListener("deviceorientation", onOrientation);
+      if (activeTimeout !== null) window.clearTimeout(activeTimeout);
       textureRef.current?.dispose();
       textureRef.current = null;
       materialRef.current = null;
