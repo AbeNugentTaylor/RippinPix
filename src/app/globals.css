@@ -539,14 +539,22 @@ a:hover {
   will-change: transform, opacity;
 }
 
-/* A landscape card keeps its natural 88:63 shape (wide, not squeezed into a
-   single portrait-width column) by spanning 2 grid columns — that gives it
-   roughly the same height as its portrait neighbors instead of coming out
-   short/squat, while the photo, caption, and holo effects inside render
-   normally (not rotated — see Card3D.tsx/CardLightbox.tsx for the true
-   landscape 3D view, which this grid card is just a flat preview of). */
+/* A landscape card is the same physical card rotated 90deg, so its two
+   edges should swap exactly with a portrait card's: its height should equal
+   a portrait card's width, and (since both share the 63:88 ratio, just
+   inverted) its width then works out to a portrait card's height. It spans
+   2 grid columns for room, but is explicitly sized to that swapped pair and
+   centered in the space rather than stretching to fill both columns.
+     100% here is this item's own grid area — 2 columns plus the gap between
+   them, per how grid resolves percentages for spanning items — so
+   (100% - gap) / 2 recovers a single column's width, i.e. a portrait card's
+   own width. Multiplying by 88/63 turns that into this card's width, and
+   aspect-ratio derives the height back down to exactly that single column
+   width again. */
 .plate-card--landscape {
   grid-column: span 2;
+  justify-self: center;
+  width: calc((100% - var(--space-4)) / 2 * 88 / 63);
   aspect-ratio: 88 / 63;
 }
 
