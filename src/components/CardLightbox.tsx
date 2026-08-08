@@ -27,18 +27,24 @@ export default function CardLightbox({ card, onClose }: CardLightboxProps) {
 
   if (!card) return null;
 
+  const isLandscape = card.orientation === "landscape";
+
   return (
     <div className="lightbox-backdrop" onClick={onClose}>
       <button className="lightbox-close" onClick={onClose} aria-label="Close">
         Close
       </button>
-      <div className="lightbox-card-frame" onClick={(e) => e.stopPropagation()}>
+      <div
+        className={`lightbox-card-frame${isLandscape ? " lightbox-card-frame--landscape" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <Card3D
           photoUrl={card.photoUrl}
           crop={card.crop}
           rarity={card.rarity}
           holo={card.holo}
           holoPattern={card.holoPattern}
+          orientation={card.orientation}
         />
         <CardCaptionOverlay card={card} />
       </div>

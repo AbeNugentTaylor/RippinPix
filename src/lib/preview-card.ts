@@ -26,6 +26,7 @@ export function configToPreviewCard(key: string, config: CardConfig): Card {
     rarity: config.rarity,
     holo: config.holo,
     holoPattern: config.holoPattern,
+    orientation: config.orientation,
     attributes: config.attributes,
     crop: config.crop,
   };
