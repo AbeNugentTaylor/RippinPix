@@ -520,47 +520,60 @@ a:hover {
   filter: brightness(1.12);
 }
 
+/* flex, not grid: a landscape card's width is never an exact multiple of a
+   portrait card's column, so reserving whole grid columns for it always
+   leaves leftover dead space no centering trick fully absorbs — flexbox's
+   gap is inserted uniformly between adjacent items regardless of their
+   individual widths, which is what actually keeps every gap the same. */
 .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
+  --card-min-w: 172px;
+  /* Grid's shared 1fr columns bound growth by the whole layout's column
+     count, so a sparse row never blows up — flex-wrap's growth is per row,
+     so a trailing row with only 1-2 items left would otherwise stretch them
+     to fill the entire row width unbounded. Capping width keeps growth in
+     the same "fills out a normal row nicely" range without that runaway. */
+  --card-max-w: calc(var(--card-min-w) * 1.5);
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-6) var(--space-4);
-  /* Without this, grid's default stretch alignment fights each card's
+  /* Without this, flex's default stretch alignment fights each card's
      aspect-ratio (63:88 portrait, 88:63 landscape) — some browsers resolve
      that by keeping height stretched to the row's tallest card and blowing
-     the width out past the column to preserve the ratio, which is exactly
-     wrong for a mixed-orientation grid. Pinning to the top lets every card's
-     box come purely from its own column width + aspect-ratio. */
-  align-items: start;
+     the width out to preserve the ratio, which is exactly wrong for a
+     mixed-orientation row. Pinning to the top lets every card's box come
+     purely from its own resolved width + aspect-ratio. */
+  align-items: flex-start;
 }
 
 .plate-card {
+  /* grow:1, shrink:0 — mirrors the old minmax(172px, 1fr) grid column: grows
+     to fill leftover row space, never shrinks below the floor (narrow
+     viewports wrap to fewer per row instead). */
+  flex: 1 0 var(--card-min-w);
+  max-width: var(--card-max-w);
   perspective: 1400px;
   aspect-ratio: 63 / 88;
   will-change: transform, opacity;
 }
 
-/* A landscape card is the same physical card rotated 90deg, so its two
-   edges should swap exactly with a portrait card's: its height should equal
-   a portrait card's width, and (since both share the 63:88 ratio, just
-   inverted) its width then works out to a portrait card's height. It spans
-   2 grid columns for room, but is explicitly sized to that swapped pair and
-   centered in the space rather than stretching to fill both columns.
-     100% here is this item's own grid area — 2 columns plus the gap between
-   them, per how grid resolves percentages for spanning items — so
-   (100% - gap) / 2 recovers a single column's width, i.e. a portrait card's
-   own width. Multiplying by 88/63 turns that into this card's width, and
-   aspect-ratio derives the height back down to exactly that single column
-   width again. */
+/* A landscape card is the same physical card rotated 90deg and bumped 10%
+   larger, so its resolved width should always be (88/63 * 1.1) times a
+   portrait card's — at ANY viewport width, not just one. Flex's sizing
+   algorithm is width = basis + (grow / total-grow) * leftover-space; scaling
+   both this item's basis AND its grow factor by the same K against the
+   portrait cards' basis/grow (1 / var(--card-min-w)) makes its resolved
+   width exactly K times a portrait card's, for every leftover-space value —
+   see the flex-basis/flex-grow pair below. aspect-ratio then derives height
+   from that width the same way it does for portrait cards. */
 .plate-card--landscape {
-  grid-column: span 2;
-  justify-self: center;
-  /* .grid's align-items: start pins every card to the top of its row —
-     right for same-height portrait cards sharing a row, but it left this
-     shorter box stranded near the top with dead space below instead of
-     centered against its taller row-mates. */
-  align-self: center;
-  width: calc((100% - var(--space-4)) / 2 * 88 / 63);
+  flex-grow: calc(88 / 63 * 1.1);
+  flex-shrink: 0;
+  flex-basis: calc(var(--card-min-w) * 88 / 63 * 1.1);
+  max-width: calc(var(--card-max-w) * 88 / 63 * 1.1);
   aspect-ratio: 88 / 63;
+  /* Shorter than its taller portrait row-mates — center it against them
+     instead of leaving it pinned to the top with dead space below. */
+  align-self: center;
 }
 
 .plate-card-tilt {
