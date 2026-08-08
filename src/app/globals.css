@@ -524,6 +524,13 @@ a:hover {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
   gap: var(--space-6) var(--space-4);
+  /* Without this, grid's default stretch alignment fights each card's
+     aspect-ratio (63:88 portrait, 88:63 landscape) — some browsers resolve
+     that by keeping height stretched to the row's tallest card and blowing
+     the width out past the column to preserve the ratio, which is exactly
+     wrong for a mixed-orientation grid. Pinning to the top lets every card's
+     box come purely from its own column width + aspect-ratio. */
+  align-items: start;
 }
 
 .plate-card {
