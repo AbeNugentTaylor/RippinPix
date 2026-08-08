@@ -37,7 +37,14 @@ const HOVER_SCALE = 1.12;
 // and a second tap confirms — the lift needs to read clearly at a glance on a
 // small screen, hence the bigger multiplier over the desktop hover values.
 const HOVER_LIFT_Y_TOUCH = HOVER_LIFT_Y * 1.6;
-const HOVER_LIFT_Z_TOUCH = HOVER_LIFT_Z * 1.6;
+// Unlike desktop hover, touch has no continuous per-frame raycast tracking
+// the cursor onto the pack as it moves — arm/confirm re-raycasts the tap
+// point twice, days apart in frame time. If the armed pack recedes in Z
+// (as HOVER_LIFT_Z does for desktop), it moves *behind* its still-resting
+// neighbors from the camera's point of view, so the confirming tap's
+// raycast hits whatever's now nearest along that ray instead — a different
+// pack entirely. Keeping touch's Z lift at 0 keeps the armed pack in front.
+const HOVER_LIFT_Z_TOUCH = 0;
 const HOVER_SCALE_TOUCH = 1 + (HOVER_SCALE - 1) * 1.6;
 const MODEL_URL = "/models/booster_pack_tcg_pack.glb";
 
@@ -1263,6 +1270,22 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     return o ? (o.userData.packId as string) : null;
   }
 
+  // Raycast against one specific pack's mesh only, ignoring every other
+  // pack that might be nearer along the same ray. Used to confirm an
+  // already-armed pack: general raycastPackAtNdc always resolves to
+  // whichever pack is nearest-along-the-ray, but a raised/tilted armed pack
+  // can end up partly behind a still-resting neighbor at the same screen
+  // point, so testing against the whole pile can miss the pack the user is
+  // actually trying to confirm.
+  function raycastHitsPack(ndcX: number, ndcY: number, id: string): boolean {
+    const cam = cameraRef.current;
+    const ray = rayRef.current;
+    const rig = rigsRef.current?.[id];
+    if (!cam || !ray || !rig) return false;
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
+    return ray.intersectObject(rig.root, true).length > 0;
+  }
+
   function onHover(e: PointerEvent) {
     const el = stageElRef.current;
     if (!el) return;
@@ -1345,18 +1368,26 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
         const r = el.getBoundingClientRect();
         const ndcX = ((e.clientX - r.left) / r.width - 0.5) * 2;
         const ndcY = -(((e.clientY - r.top) / r.height - 0.5) * 2);
-        const id = raycastPackAtNdc(ndcX, ndcY);
         const prevArmed = armedId.current;
-        logDebug(`  raycast id=${id ?? "null"} prevArmed=${prevArmed ?? "null"}`);
-        if (id && id === armedId.current) {
-          // Second touchdown on the already-armed pack — confirm now.
-          logDebug(`  CONFIRM -> pickPack(${id})`);
-          pickPack(id);
+        if (prevArmed && raycastHitsPack(ndcX, ndcY, prevArmed)) {
+          // Second touchdown on the already-armed pack — confirm now. Tested
+          // directly against its own mesh (not the general pile raycast) so
+          // a raised pack that's partly occluded by a resting neighbor at
+          // this screen point still confirms correctly.
+          logDebug(`  CONFIRM -> pickPack(${prevArmed}) (armed-hit)`);
+          pickPack(prevArmed);
         } else {
-          logDebug(`  ARM -> ${id ?? "null"}`);
-          armedId.current = id;
-          hoverId.current = id;
-          el.style.cursor = id ? "pointer" : "default";
+          const id = raycastPackAtNdc(ndcX, ndcY);
+          logDebug(`  raycast id=${id ?? "null"} prevArmed=${prevArmed ?? "null"}`);
+          if (id && id === prevArmed) {
+            logDebug(`  CONFIRM -> pickPack(${id})`);
+            pickPack(id);
+          } else {
+            logDebug(`  ARM -> ${id ?? "null"}`);
+            armedId.current = id;
+            hoverId.current = id;
+            el.style.cursor = id ? "pointer" : "default";
+          }
         }
       }
     }
