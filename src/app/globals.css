@@ -532,6 +532,10 @@ a:hover {
   will-change: transform, opacity;
 }
 
+.plate-card--landscape {
+  aspect-ratio: 88 / 63;
+}
+
 .plate-card-tilt {
   width: 100%;
   height: 100%;
@@ -846,6 +850,11 @@ a:hover {
   border-radius: 22px;
   overflow: hidden;
   box-shadow: var(--shadow-lg);
+}
+
+.lightbox-card-frame--landscape {
+  width: min(80vw, 586px);
+  aspect-ratio: 88 / 63;
 }
 
 .credits {

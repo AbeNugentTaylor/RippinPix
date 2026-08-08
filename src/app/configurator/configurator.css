@@ -253,6 +253,10 @@
   cursor: grabbing;
 }
 
+.cfg-crop-frame--landscape {
+  aspect-ratio: 88 / 63;
+}
+
 .cfg-crop-error {
   position: absolute;
   inset: auto 0 0 0;
@@ -274,6 +278,10 @@
   padding: 0;
   border: none;
   display: block;
+}
+
+.cfg-preview-frame--landscape {
+  aspect-ratio: 88 / 63;
 }
 
 .cfg-preview-frame--clickable {

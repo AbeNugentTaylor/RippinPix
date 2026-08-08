@@ -86,6 +86,8 @@ export default function PackOpeningApp({ photoManifest, cardConfigs }: PackOpeni
         photoUrl: photoManifest[slot] ?? null,
         rarity: config?.rarity,
         holo: config?.holo,
+        holoPattern: config?.holoPattern,
+        orientation: config?.orientation,
         attributes: config?.attributes,
         crop: config?.crop,
       });

@@ -47,6 +47,8 @@ export type Rarity = "common" | "uncommon" | "rare" | "holo" | "secret";
 // baked fixed to the card rather than sliding with the parallax/hue layer.
 export type HoloPattern = "none" | "cosmos" | "stripes" | "sunburst";
 
+export type CardOrientation = "portrait" | "landscape";
+
 export interface Attribute {
   label: string;
   value: string;
@@ -69,6 +71,7 @@ export interface CardConfig {
   rarity: Rarity;
   holo: boolean;
   holoPattern?: HoloPattern;
+  orientation?: CardOrientation;
   attributes: Attribute[];
   title?: string;
   date?: string;
@@ -94,6 +97,7 @@ export interface Card {
   rarity?: Rarity;
   holo?: boolean;
   holoPattern?: HoloPattern;
+  orientation?: CardOrientation;
   attributes?: Attribute[];
   crop?: Crop;
 }

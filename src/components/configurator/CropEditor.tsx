@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRef, useState, type PointerEvent } from "react";
-import type { Crop } from "@/lib/types";
+import type { CardOrientation, Crop } from "@/lib/types";
 
 async function describeLoadFailure(src: string): Promise<string> {
   try {
@@ -18,6 +18,7 @@ interface CropEditorProps {
   src: string;
   crop: Crop;
   onChange: (crop: Crop) => void;
+  orientation?: CardOrientation;
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
@@ -25,7 +26,7 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 // Drag pans (adjusts crop.x/y, the CSS object-position), a zoom slider next
 // to this component adjusts crop.zoom (a scale() on top of object-fit:cover).
 // Same three numbers Card.tsx applies on the live site.
-export default function CropEditor({ src, crop, onChange }: CropEditorProps) {
+export default function CropEditor({ src, crop, onChange, orientation }: CropEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; startCropX: number; startCropY: number } | null>(
     null
@@ -59,7 +60,7 @@ export default function CropEditor({ src, crop, onChange }: CropEditorProps) {
   return (
     <div
       ref={containerRef}
-      className={`cfg-crop-frame${dragging ? " cfg-crop-frame--dragging" : ""}`}
+      className={`cfg-crop-frame${dragging ? " cfg-crop-frame--dragging" : ""}${orientation === "landscape" ? " cfg-crop-frame--landscape" : ""}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

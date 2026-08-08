@@ -27,6 +27,7 @@ export default function Card({ card, shopName, packPrice, registerRefs, onSelect
   }, [card.key]);
 
   const fullArt = Boolean(card.rarity);
+  const isLandscape = card.orientation === "landscape";
   const crop = card.crop ?? { x: 50, y: 50, zoom: 1 };
   // The configurator's live preview points photoUrl at /api/local-image?path=...
   // (an uncropped, un-optimized original) rather than a static /photos/ file —
@@ -40,7 +41,7 @@ export default function Card({ card, shopName, packPrice, registerRefs, onSelect
     <div
       ref={outerRef}
       data-card-key={card.key}
-      className={`plate-card${fullArt ? " plate-card--full-art" : ""}`}
+      className={`plate-card${fullArt ? " plate-card--full-art" : ""}${isLandscape ? " plate-card--landscape" : ""}`}
       style={{ order: card.order, display: card.display }}
       onPointerMove={card.holo ? onPointerMove : undefined}
       onPointerLeave={card.holo ? onPointerLeave : undefined}

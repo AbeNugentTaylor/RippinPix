@@ -4,13 +4,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { DESIGNS } from "@/lib/designs";
 import { configKey, deleteCardConfig, getCardConfigs, nextLocalSlot, saveCardConfig } from "@/lib/card-configs.server";
 import { describeReadError } from "@/lib/cloud-file.server";
-import type { Attribute, CardConfig, Crop, HoloPattern, Rarity } from "@/lib/types";
+import type { Attribute, CardConfig, CardOrientation, Crop, HoloPattern, Rarity } from "@/lib/types";
 
 // Local-only: copies a chosen photo into public/photos/ and upserts
 // src/data/card-configs.json. Never available in a deployed build.
 const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "holo", "secret"];
 const HOLO_PATTERNS: HoloPattern[] = ["none", "cosmos", "stripes", "sunburst"];
+const ORIENTATIONS: CardOrientation[] = ["portrait", "landscape"];
 
 interface SaveBody {
   sourcePath?: string;
@@ -21,6 +22,7 @@ interface SaveBody {
   rarity: Rarity;
   holo?: boolean;
   holoPattern?: HoloPattern;
+  orientation?: CardOrientation;
   attributes?: Attribute[];
   title?: string;
   date?: string;
@@ -48,6 +50,9 @@ export async function POST(request: NextRequest) {
   }
   if (body.holoPattern !== undefined && !HOLO_PATTERNS.includes(body.holoPattern)) {
     return NextResponse.json({ error: "Invalid holo pattern" }, { status: 400 });
+  }
+  if (body.orientation !== undefined && !ORIENTATIONS.includes(body.orientation)) {
+    return NextResponse.json({ error: "Invalid orientation" }, { status: 400 });
   }
 
   // Editing an already-imported card: reuse the photo already sitting in
@@ -116,6 +121,7 @@ export async function POST(request: NextRequest) {
     rarity: body.rarity,
     holo: body.holo ?? (body.rarity === "holo" || body.rarity === "secret"),
     holoPattern: body.holoPattern ?? "none",
+    orientation: body.orientation ?? "portrait",
     attributes: body.attributes ?? [],
     title: body.title || undefined,
     date: body.date || undefined,

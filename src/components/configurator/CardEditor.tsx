@@ -23,7 +23,7 @@ import LightingDebugPanel from "./LightingDebugPanel";
 import type { Entry } from "./FolderBrowser";
 import { DESIGNS, POOLS } from "@/lib/designs";
 import { firstEmptySlot, configKey } from "@/lib/card-key";
-import type { Attribute, Card as CardT, CardConfig, Crop, HoloPattern, Rarity } from "@/lib/types";
+import type { Attribute, Card as CardT, CardConfig, CardOrientation, Crop, HoloPattern, Rarity } from "@/lib/types";
 
 export type EditorTarget = { kind: "new"; image: Entry } | { kind: "edit"; key: string };
 
@@ -33,6 +33,10 @@ const HOLO_PATTERNS: { value: HoloPattern; label: string }[] = [
   { value: "cosmos", label: "Cosmos" },
   { value: "stripes", label: "Stripes" },
   { value: "sunburst", label: "Sunburst" },
+];
+const ORIENTATIONS: { value: CardOrientation; label: string }[] = [
+  { value: "portrait", label: "Portrait" },
+  { value: "landscape", label: "Landscape" },
 ];
 
 // Mirrors the defaulting logic in Card3D's own holo-properties effect, so the
@@ -78,6 +82,7 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
   const [rarity, setRarity] = useState<Rarity>(() => editingConfig?.rarity ?? "common");
   const [holo, setHolo] = useState(() => editingConfig?.holo ?? false);
   const [holoPattern, setHoloPattern] = useState<HoloPattern>(() => editingConfig?.holoPattern ?? "none");
+  const [orientation, setOrientation] = useState<CardOrientation>(() => editingConfig?.orientation ?? "portrait");
   const [attributes, setAttributes] = useState<Attribute[]>(() => editingConfig?.attributes ?? []);
   const [title, setTitle] = useState(() => editingConfig?.title ?? "");
   const [date, setDate] = useState(() => editingConfig?.date ?? "");
@@ -148,10 +153,26 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
       rarity,
       holo,
       holoPattern,
+      orientation,
       attributes,
       crop,
     }),
-    [designId, local, design, title, placeholder, date, medium, src, rarity, holo, holoPattern, attributes, crop]
+    [
+      designId,
+      local,
+      design,
+      title,
+      placeholder,
+      date,
+      medium,
+      src,
+      rarity,
+      holo,
+      holoPattern,
+      orientation,
+      attributes,
+      crop,
+    ]
   );
 
   const handleSave = async () => {
@@ -170,6 +191,7 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
           rarity,
           holo,
           holoPattern,
+          orientation,
           attributes: attributes.filter((a) => a.label.trim() || a.value.trim()),
           title: title || undefined,
           date: date || undefined,
@@ -212,7 +234,7 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
 
       <div className="cfg-editor-body">
         <div className="cfg-editor-crop">
-          <CropEditor src={src} crop={crop} onChange={setCrop} />
+          <CropEditor src={src} crop={crop} onChange={setCrop} orientation={orientation} />
           <label className="cfg-field">
             Zoom
             <input
@@ -229,7 +251,7 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
         <div className="cfg-editor-preview">
           <span className="cfg-field-label">Live preview — click to view full size</span>
           <div
-            className="cfg-preview-frame cfg-preview-frame--clickable"
+            className={`cfg-preview-frame cfg-preview-frame--clickable${orientation === "landscape" ? " cfg-preview-frame--landscape" : ""}`}
             role="button"
             tabIndex={0}
             onClick={() => setLightboxOpen(true)}
@@ -241,12 +263,17 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
             }}
             aria-label="View full size, as it will appear in the production app"
           >
+            {/* Keyed on orientation: Card3D builds its plane geometry and camera
+                once at mount, so a live orientation change needs a fresh instance
+                rather than an in-place update. */}
             <Card3D
+              key={orientation}
               photoUrl={src}
               crop={crop}
               rarity={rarity}
               holo={holo}
               holoPattern={holoPattern}
+              orientation={orientation}
               overrides={overrides}
             />
             <CardCaptionOverlay card={previewCard} />
@@ -277,6 +304,17 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
             />
           </label>
           {existing && <p className="cfg-warning">Slot already has a saved card — saving will overwrite it.</p>}
+
+          <label className="cfg-field">
+            Orientation
+            <select value={orientation} onChange={(e) => setOrientation(e.target.value as CardOrientation)}>
+              {ORIENTATIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="cfg-field">
             Rarity

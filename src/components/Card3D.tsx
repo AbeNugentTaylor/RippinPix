@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import type { Crop, HoloPattern, Rarity } from "@/lib/types";
+import type { CardOrientation, Crop, HoloPattern, Rarity } from "@/lib/types";
 
 // Live-tunable overrides for the debug panel (src/components/configurator/
 // LightingDebugPanel.tsx) — anything left undefined falls back to the normal
@@ -30,6 +30,7 @@ interface Card3DProps {
   rarity?: Rarity;
   holo?: boolean;
   holoPattern?: HoloPattern;
+  orientation?: CardOrientation;
   overrides?: Card3DOverrides;
 }
 
@@ -119,10 +120,19 @@ export const ENV_INTENSITY: Record<Rarity, number> = {
   secret: 0.65,
 };
 
-const PLANE_W = 6.3;
-const PLANE_H = 8.8;
-const BOX_ASPECT = PLANE_W / PLANE_H;
+// A 63:88 plane at 0.1 world-units-per-mm, matching a real trading card's
+// short/long edges — swapped for a "landscape" card (CardConfig.orientation)
+// rather than kept fixed, so the geometry/camera/holo-mask below all size
+// themselves to whichever edge is actually "up" for that card.
+const PLANE_SHORT = 6.3;
+const PLANE_LONG = 8.8;
 const CORNER_RADIUS = 0.32; // real trading cards run ~3mm on a 63mm width
+
+function planeSize(orientation?: CardOrientation): { w: number; h: number } {
+  return orientation === "landscape"
+    ? { w: PLANE_LONG, h: PLANE_SHORT }
+    : { w: PLANE_SHORT, h: PLANE_LONG };
+}
 const FOV = 26;
 // Flat resting pose — an earlier permanent baseline tilt (added to guarantee
 // *some* viewing angle for Fresnel/iridescence) turned out to not be the
@@ -156,11 +166,11 @@ export const HOLO_PATTERN_SCALE = 1;
 // mask that wants it. Lower = calmer, slower flicker; higher = twitchier.
 export const HOLO_SPARKLE_FREQ = 1;
 
-// A 63:88 plane with rounded corners (real cards aren't sharp-cornered
-// rectangles).
-function createCardGeometry(): THREE.BufferGeometry {
-  const w = PLANE_W / 2;
-  const h = PLANE_H / 2;
+// A 63:88 (or, for a landscape card, 88:63) plane with rounded corners (real
+// cards aren't sharp-cornered rectangles).
+function createCardGeometry(planeW: number, planeH: number): THREE.BufferGeometry {
+  const w = planeW / 2;
+  const h = planeH / 2;
   const r = CORNER_RADIUS;
   const shape = new THREE.Shape();
   shape.moveTo(-w + r, -h);
@@ -182,7 +192,7 @@ function createCardGeometry(): THREE.BufferGeometry {
   const pos = geometry.attributes.position;
   const uv = geometry.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
-    uv.setXY(i, (pos.getX(i) + w) / PLANE_W, (pos.getY(i) + h) / PLANE_H);
+    uv.setXY(i, (pos.getX(i) + w) / planeW, (pos.getY(i) + h) / planeH);
   }
   uv.needsUpdate = true;
 
@@ -337,7 +347,9 @@ function textureFromCosmosMaskData(maskData: { width: number; height: number; da
 // garbage into that gate — canvas draw calls (fillRect/stroke) write equal
 // R/G/B for white, so those masks explicitly zero G/B after drawing.
 const MASK_W = 256;
-const MASK_H = Math.round(MASK_W * (PLANE_H / PLANE_W));
+function maskHeight(planeW: number, planeH: number): number {
+  return Math.round(MASK_W * (planeH / planeW));
+}
 
 function zeroGB(imageData: ImageData): ImageData {
   const d = imageData.data;
@@ -360,19 +372,19 @@ function makeBlankMask(): THREE.Texture {
   return new THREE.CanvasTexture(c);
 }
 
-function makeStripesMask(): THREE.Texture {
+function makeStripesMask(maskW: number, maskH: number): THREE.Texture {
   const c = document.createElement("canvas");
-  c.width = MASK_W;
-  c.height = MASK_H;
+  c.width = maskW;
+  c.height = maskH;
   const g = c.getContext("2d")!;
   g.fillStyle = "#000";
-  g.fillRect(0, 0, MASK_W, MASK_H);
+  g.fillRect(0, 0, maskW, maskH);
   g.strokeStyle = "#fff";
   g.lineWidth = 3;
   g.save();
-  g.translate(MASK_W / 2, MASK_H / 2);
+  g.translate(maskW / 2, maskH / 2);
   g.rotate(Math.PI / 8);
-  const diag = Math.sqrt(MASK_W * MASK_W + MASK_H * MASK_H);
+  const diag = Math.sqrt(maskW * maskW + maskH * maskH);
   for (let x = -diag; x <= diag; x += 9) {
     g.beginPath();
     g.moveTo(x, -diag);
@@ -380,27 +392,27 @@ function makeStripesMask(): THREE.Texture {
     g.stroke();
   }
   g.restore();
-  g.putImageData(zeroGB(g.getImageData(0, 0, MASK_W, MASK_H)), 0, 0);
+  g.putImageData(zeroGB(g.getImageData(0, 0, maskW, maskH)), 0, 0);
   return new THREE.CanvasTexture(c);
 }
 
-function makeSunburstMask(): THREE.Texture {
+function makeSunburstMask(maskW: number, maskH: number): THREE.Texture {
   const c = document.createElement("canvas");
-  c.width = MASK_W;
-  c.height = MASK_H;
+  c.width = maskW;
+  c.height = maskH;
   const g = c.getContext("2d")!;
-  const img = g.createImageData(MASK_W, MASK_H);
+  const img = g.createImageData(maskW, maskH);
   const d = img.data;
-  const cx = MASK_W / 2;
-  const cy = MASK_H / 2;
+  const cx = maskW / 2;
+  const cy = maskH / 2;
   const rays = 40;
-  for (let y = 0; y < MASK_H; y++) {
-    for (let x = 0; x < MASK_W; x++) {
-      const i = (y * MASK_W + x) * 4;
+  for (let y = 0; y < maskH; y++) {
+    for (let x = 0; x < maskW; x++) {
+      const i = (y * maskW + x) * 4;
       // Normalize by each half-axis so rays radiate as true circles despite
       // the card's non-square aspect, instead of stretching into an ellipse.
-      const dx = (x - cx) / (MASK_W / 2);
-      const dy = (y - cy) / (MASK_H / 2);
+      const dx = (x - cx) / (maskW / 2);
+      const dy = (y - cy) / (maskH / 2);
       const dist = Math.sqrt(dx * dx + dy * dy);
       const angle = Math.atan2(dy, dx);
       const ray = (Math.sin(angle * rays) + 1) / 2;
@@ -416,15 +428,16 @@ function makeSunburstMask(): THREE.Texture {
   return new THREE.CanvasTexture(c);
 }
 
-function makeHoloMaskTextures(): Record<HoloPattern, THREE.Texture> {
+function makeHoloMaskTextures(planeW: number, planeH: number): Record<HoloPattern, THREE.Texture> {
+  const maskH = maskHeight(planeW, planeH);
   const textures = {
     none: makeBlankMask(),
     // Placeholder until loadCosmosMaskData's async photo-derived mask loads
     // and replaces this (see the mount effect below) — blank rather than
     // empty so the overlay isn't invisible during the brief loading window.
     cosmos: makeBlankMask(),
-    stripes: makeStripesMask(),
-    sunburst: makeSunburstMask(),
+    stripes: makeStripesMask(MASK_W, maskH),
+    sunburst: makeSunburstMask(MASK_W, maskH),
   };
   // Repeat wrapping so uMaskScale (see HOLO_FRAGMENT_SHADER) can tile these
   // finer than 1:1 instead of clamping/stretching at the texture edges.
@@ -540,15 +553,15 @@ const HOLO_FRAGMENT_SHADER = `
 // source; three.js u=0/1 is also left/right, so offsetX maps directly. CSS
 // y=0% = show the top of the source; three.js v=0 is the bottom of the image
 // (TextureLoader's default flipY), so offsetY uses (1 - y/100).
-function applyCrop(texture: THREE.Texture, crop: Crop, imgAspect: number) {
+function applyCrop(texture: THREE.Texture, crop: Crop, imgAspect: number, boxAspect: number) {
   let repeatX: number;
   let repeatY: number;
-  if (imgAspect > BOX_ASPECT) {
+  if (imgAspect > boxAspect) {
     repeatY = 1;
-    repeatX = BOX_ASPECT / imgAspect;
+    repeatX = boxAspect / imgAspect;
   } else {
     repeatX = 1;
-    repeatY = imgAspect / BOX_ASPECT;
+    repeatY = imgAspect / boxAspect;
   }
   const zoom = Math.max(1, crop.zoom || 1);
   repeatX /= zoom;
@@ -558,13 +571,18 @@ function applyCrop(texture: THREE.Texture, crop: Crop, imgAspect: number) {
   texture.needsUpdate = true;
 }
 
-export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, overrides }: Card3DProps) {
+export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, orientation, overrides }: Card3DProps) {
+  // Fixed for the life of this instance — a caller that lets orientation
+  // change (CardEditor's live preview) keys the component to force a fresh
+  // mount instead, since the geometry/camera built below are one-shot.
+  const { w: planeW, h: planeH } = planeSize(orientation);
+  const boxAspect = planeW / planeH;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dead = useRef(false);
   const raf = useRef<number | null>(null);
   const materialRef = useRef<THREE.MeshPhysicalMaterial | null>(null);
   const textureRef = useRef<THREE.Texture | null>(null);
-  const imgAspectRef = useRef(BOX_ASPECT);
+  const imgAspectRef = useRef(boxAspect);
   const cropRef = useRef(crop);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -606,7 +624,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     const w = el.clientWidth || 220;
-    const h = el.clientHeight || Math.round((w * PLANE_H) / PLANE_W);
+    const h = el.clientHeight || Math.round((w * planeH) / planeW);
     // setSize(w, h) sizes both the drawing buffer (scaled by pixelRatio, for
     // sharpness) and the canvas's own CSS width/height (in logical px) from
     // the same measurement — forcing the CSS side to "100%" afterward (as
@@ -631,7 +649,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     // (see loop() below) now keep the card off dead-on by default, and this
     // needs enough headroom that the rounded corners don't clip against the
     // frame at that angle.
-    const dist = (PLANE_H / 2 / Math.tan((FOV * Math.PI) / 360)) * 1.14;
+    const dist = (planeH / 2 / Math.tan((FOV * Math.PI) / 360)) * 1.14;
     camera.position.set(0, 0, dist);
     cameraRef.current = camera;
 
@@ -670,7 +688,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       opacity: 0,
     });
     materialRef.current = material;
-    const geometry = createCardGeometry();
+    const geometry = createCardGeometry(planeW, planeH);
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
@@ -678,7 +696,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     // every frame for free, offset a hair along local Z so it sits visually
     // in front without z-fighting. Hidden until a holo-tier card sets its
     // intensity above 0 (see the rarity/holo effect below).
-    const holoMaskTextures = makeHoloMaskTextures();
+    const holoMaskTextures = makeHoloMaskTextures(planeW, planeH);
     holoMaskTexturesRef.current = holoMaskTextures;
     const holoMaterial = new THREE.ShaderMaterial({
       vertexShader: HOLO_VERTEX_SHADER,
@@ -875,6 +893,9 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       renderer.dispose();
       if (renderer.domElement.parentNode) renderer.domElement.remove();
     };
+    // planeW/planeH/boxAspect are derived from `orientation`, treated as
+    // fixed for this instance's lifetime (see the comment above them).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load / swap the photo texture.
@@ -900,7 +921,7 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
       texture.colorSpace = THREE.SRGBColorSpace;
       const img = texture.image as HTMLImageElement;
       imgAspectRef.current = img.width / img.height;
-      applyCrop(texture, cropRef.current ?? { x: 50, y: 50, zoom: 1 }, imgAspectRef.current);
+      applyCrop(texture, cropRef.current ?? { x: 50, y: 50, zoom: 1 }, imgAspectRef.current, boxAspect);
       textureRef.current?.dispose();
       textureRef.current = texture;
       material.map = texture;
@@ -912,14 +933,16 @@ export default function Card3D({ photoUrl, crop, rarity, holo, holoPattern, over
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photoUrl]);
 
   // Re-apply crop when it changes (same texture, new repeat/offset).
   useEffect(() => {
     const texture = textureRef.current;
     if (!texture || !crop) return;
-    applyCrop(texture, crop, imgAspectRef.current);
+    applyCrop(texture, crop, imgAspectRef.current, boxAspect);
     renderNow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crop]);
 
   // Update holo material properties.
