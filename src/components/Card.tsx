@@ -41,7 +41,7 @@ export default function Card({ card, shopName, packPrice, registerRefs, onSelect
     <div
       ref={outerRef}
       data-card-key={card.key}
-      className={`plate-card${fullArt ? " plate-card--full-art" : ""}`}
+      className={`plate-card${fullArt ? " plate-card--full-art" : ""}${isLandscape ? " plate-card--landscape" : ""}`}
       style={{ order: card.order, display: card.display }}
       onPointerMove={card.holo ? onPointerMove : undefined}
       onPointerLeave={card.holo ? onPointerLeave : undefined}
@@ -62,79 +62,71 @@ export default function Card({ card, shopName, packPrice, registerRefs, onSelect
       tabIndex={onSelect ? 0 : undefined}
       aria-label={onSelect ? `View ${card.title} full size` : undefined}
     >
-      {/* Landscape cards keep the exact same grid footprint as a portrait
-          card (.plate-card's aspect-ratio never changes) — this frame is the
-          actual landscape-proportioned card, sized to exactly fill that
-          footprint once rotated 90°, same as flipping a physical card on
-          its side in a portrait-cut binder page. Plain pass-through box for
-          portrait cards. */}
-      <div className={`plate-card-frame${isLandscape ? " plate-card-frame--landscape" : ""}`}>
-        <div className="plate-card-tilt" style={{ transform: `rotate(${card.tilt}deg)` }}>
-          <div ref={innerRef} className="plate-card-inner">
-            <div className="plate-card-front">
-              {fullArt ? (
-                <div className="plate-card-photo plate-card-photo--full">
+      <div className="plate-card-tilt" style={{ transform: `rotate(${card.tilt}deg)` }}>
+        <div ref={innerRef} className="plate-card-inner">
+          <div className="plate-card-front">
+            {fullArt ? (
+              <div className="plate-card-photo plate-card-photo--full">
+                {card.photoUrl ? (
+                  <Image
+                    src={card.photoUrl}
+                    alt={card.title}
+                    fill
+                    unoptimized={isLocalPreview}
+                    sizes={zoomedSizes}
+                    style={{
+                      objectFit: "cover",
+                      objectPosition: `${crop.x}% ${crop.y}%`,
+                      transform: `scale(${crop.zoom})`,
+                    }}
+                  />
+                ) : (
+                  <div className="plate-card-photo-placeholder">Drop a photograph</div>
+                )}
+                {card.holo && <span className="card-holo-sheen" data-rarity={card.rarity} />}
+                <CardCaptionOverlay card={card} />
+              </div>
+            ) : (
+              <>
+                <div className="plate-card-photo">
                   {card.photoUrl ? (
                     <Image
                       src={card.photoUrl}
                       alt={card.title}
                       fill
-                      unoptimized={isLocalPreview}
-                      sizes={zoomedSizes}
-                      style={{
-                        objectFit: "cover",
-                        objectPosition: `${crop.x}% ${crop.y}%`,
-                        transform: `scale(${crop.zoom})`,
-                      }}
+                      sizes="(max-width: 600px) 45vw, 172px"
+                      style={{ objectFit: "cover" }}
                     />
                   ) : (
                     <div className="plate-card-photo-placeholder">Drop a photograph</div>
                   )}
-                  {card.holo && <span className="card-holo-sheen" data-rarity={card.rarity} />}
-                  <CardCaptionOverlay card={card} />
                 </div>
-              ) : (
-                <>
-                  <div className="plate-card-photo">
-                    {card.photoUrl ? (
-                      <Image
-                        src={card.photoUrl}
-                        alt={card.title}
-                        fill
-                        sizes="(max-width: 600px) 45vw, 172px"
-                        style={{ objectFit: "cover" }}
-                      />
-                    ) : (
-                      <div className="plate-card-photo-placeholder">Drop a photograph</div>
-                    )}
-                  </div>
-                  <div className="plate-card-caption">
-                    <span className="plate-card-kicker" style={{ color: card.ink }}>
-                      No. {card.plate} · {card.tier}
-                    </span>
-                    <span className="plate-card-title">{card.title}</span>
-                    <span className="plate-card-meta">
-                      {card.date} · {card.medium}
-                    </span>
-                  </div>
-                  <span className="plate-card-tape" />
-                  <span className="plate-card-price-tag" style={{ background: card.tag }}>
-                    {packPrice}
+                <div className="plate-card-caption">
+                  <span className="plate-card-kicker" style={{ color: card.ink }}>
+                    No. {card.plate} · {card.tier}
                   </span>
-                </>
-              )}
+                  <span className="plate-card-title">{card.title}</span>
+                  <span className="plate-card-meta">
+                    {card.date} · {card.medium}
+                  </span>
+                </div>
+                <span className="plate-card-tape" />
+                <span className="plate-card-price-tag" style={{ background: card.tag }}>
+                  {packPrice}
+                </span>
+              </>
+            )}
+          </div>
+          <div className="plate-card-back">
+            <span className="plate-card-back-label">{shopName}</span>
+            <div className="plate-card-rosette">
+              <span style={{ left: 0, top: 4, background: "var(--color-accent)", opacity: 0.85 }} />
+              <span style={{ left: 12, top: 0, background: "var(--color-accent-2)", opacity: 0.8 }} />
+              <span
+                style={{ left: 6, top: 13, background: "var(--color-process-yellow)", opacity: 0.8 }}
+              />
             </div>
-            <div className="plate-card-back">
-              <span className="plate-card-back-label">{shopName}</span>
-              <div className="plate-card-rosette">
-                <span style={{ left: 0, top: 4, background: "var(--color-accent)", opacity: 0.85 }} />
-                <span style={{ left: 12, top: 0, background: "var(--color-accent-2)", opacity: 0.8 }} />
-                <span
-                  style={{ left: 6, top: 13, background: "var(--color-process-yellow)", opacity: 0.8 }}
-                />
-              </div>
-              <span className="plate-card-back-label">{packPrice} · as-is</span>
-            </div>
+            <span className="plate-card-back-label">{packPrice} · as-is</span>
           </div>
         </div>
       </div>

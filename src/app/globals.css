@@ -534,38 +534,20 @@ a:hover {
 }
 
 .plate-card {
-  position: relative;
   perspective: 1400px;
   aspect-ratio: 63 / 88;
   will-change: transform, opacity;
 }
 
-/* Plain pass-through box for a portrait card — .plate-card-frame--landscape
-   below is what actually does anything. preserve-3d so this extra layer
-   doesn't flatten the deal-in flip animation's rotateY depth (.plate-card's
-   perspective needs an unbroken preserve-3d chain down to .plate-card-inner,
-   see CollectionGrid.tsx's dealBatch effect). */
-.plate-card-frame {
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-}
-
-/* A landscape card keeps .plate-card's own footprint at the normal 63:88
-   portrait size (same grid slot as every other card) — this is the actual
-   88:63 card, sized so that after a 90deg rotation its bounding box exactly
-   fills that footprint again, the same way a physical landscape card sits
-   sideways in a portrait-cut binder page.
-     unrotated width  = footprint height (63/88 aspect inverted)
-     unrotated height = footprint width  (from aspect-ratio, derived)
-   which is exactly what "100% * 88/63" + "aspect-ratio: 88/63" gives here. */
-.plate-card-frame--landscape {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: calc(100% * 88 / 63);
+/* A landscape card keeps its natural 88:63 shape (wide, not squeezed into a
+   single portrait-width column) by spanning 2 grid columns — that gives it
+   roughly the same height as its portrait neighbors instead of coming out
+   short/squat, while the photo, caption, and holo effects inside render
+   normally (not rotated — see Card3D.tsx/CardLightbox.tsx for the true
+   landscape 3D view, which this grid card is just a flat preview of). */
+.plate-card--landscape {
+  grid-column: span 2;
   aspect-ratio: 88 / 63;
-  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 .plate-card-tilt {
