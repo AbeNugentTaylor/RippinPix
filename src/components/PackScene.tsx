@@ -37,6 +37,10 @@ const HOVER_SCALE = 1.12;
 // — same lift as desktop hover, so it reads as "peek at the label," not
 // "picked") and a second tap confirms.
 const MODEL_URL = "/models/booster_pack_tcg_pack.glb";
+// Viewport width below which the bin gets the mobile zoom boost in
+// frameCamera() — a phone-portrait-ish breakpoint, not tied to aspect
+// ratio (a narrow desktop window shouldn't get the zoom-for-touch bump).
+const MOBILE_MAX_WIDTH = 768;
 
 interface DressedGroup {
   group: THREE.Group;
@@ -769,14 +773,24 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     });
   }
 
-  function frameCamera(width: number, depth: number, aspect: number, rows: number) {
+  function frameCamera(width: number, depth: number, aspect: number, rows: number, mobile: boolean) {
     const cam = cameraRef.current;
     if (!cam) return;
     const vf = (cam.fov * Math.PI) / 180;
     const hf = 2 * Math.atan(Math.tan(vf / 2) * aspect);
     const pitch = Math.min(0.86, 0.3 + rows * 0.062);
     const vExtent = depth * (0.5 + pitch * 0.55) + 9.5;
-    const dist = Math.max(width / 2 / Math.tan(hf / 2), vExtent / 2 / Math.tan(vf / 2)) * 1.03;
+    // The "+9.5" pad above exists mostly for tall/shallow mobile-portrait
+    // bins and leaves a lot of empty headroom above/below the box at those
+    // aspect ratios. Dividing just the vertical requirement (not the
+    // horizontal one) by 1.5 on mobile eats into that slack so the box —
+    // and every pack in it — renders ~50% bigger and easier to tap.
+    // Math.max against the horizontal requirement is what makes this safe:
+    // dist can never drop below what's needed to fit the box's width, so
+    // this can zoom in but can never crop the box's side walls off-screen.
+    const vZoom = mobile ? 1.5 : 1;
+    const dist =
+      Math.max(width / 2 / Math.tan(hf / 2), vExtent / 2 / Math.tan(vf / 2) / vZoom) * 1.03;
     const norm = Math.hypot(1, pitch);
     cam.position.set(0, (dist * pitch) / norm + 1.4, dist / norm);
     cam.lookAt(0, -1.3, -depth * 0.08);
@@ -797,7 +811,8 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     binSizeNow.current = size;
     shapeBin(size.width, size.depth);
     const reach = flapReach.current;
-    frameCamera(size.width + reach.side * 1.35, size.depth + reach.long * 1.2, aspect, lay.rows);
+    const mobile = (stageElRef.current?.clientWidth ?? window.innerWidth) <= MOBILE_MAX_WIDTH;
+    frameCamera(size.width + reach.side * 1.35, size.depth + reach.long * 1.2, aspect, lay.rows, mobile);
     counterRef.current.y = -1.3;
     counterRef.current.z = Math.min(size.depth * 0.38, 3.6);
 
@@ -1276,6 +1291,26 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     return ray.intersectObject(rig.root, true).length > 0;
   }
 
+  // Same idea, for the box itself — used to resolve a touch tap on the
+  // slid-out bin synchronously in onDown (see raycastHitsPack above for why
+  // touch can't rely on the continuous per-frame hover raycast).
+  function raycastHitsBin(ndcX: number, ndcY: number): boolean {
+    const cam = cameraRef.current;
+    const ray = rayRef.current;
+    const stageGroup = binStageRef.current;
+    if (!cam || !ray || !stageGroup) return false;
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
+    return ray.intersectObject(stageGroup, true).length > 0;
+  }
+
+  function ndcFromClient(el: HTMLDivElement, clientX: number, clientY: number) {
+    const r = el.getBoundingClientRect();
+    return {
+      x: ((clientX - r.left) / r.width - 0.5) * 2,
+      y: -(((clientY - r.top) / r.height - 0.5) * 2),
+    };
+  }
+
   function onHover(e: PointerEvent) {
     const el = stageElRef.current;
     if (!el) return;
@@ -1355,9 +1390,7 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
       // however long the finger lingers or drifts before lifting off.
       const el = stageElRef.current;
       if (el) {
-        const r = el.getBoundingClientRect();
-        const ndcX = ((e.clientX - r.left) / r.width - 0.5) * 2;
-        const ndcY = -(((e.clientY - r.top) / r.height - 0.5) * 2);
+        const { x: ndcX, y: ndcY } = ndcFromClient(el, e.clientX, e.clientY);
         const prevArmed = armedId.current;
         if (prevArmed && raycastHitsPack(ndcX, ndcY, prevArmed)) {
           // Second touchdown on the already-armed pack — confirm now. Tested
@@ -1379,6 +1412,25 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
             el.style.cursor = id ? "pointer" : "default";
           }
         }
+      }
+    } else if (
+      pointerIsTouch.current &&
+      binOut.current &&
+      (phaseRef.current === "idle" || phaseRef.current === "collected")
+    ) {
+      // Same problem as the arm/confirm block above: hoverBin normally comes
+      // from a continuous per-frame raycast tracking the pointer every
+      // frame, which touch has nothing equivalent to — ndc.current is just
+      // whatever the last touchmove reported, stale the instant the finger
+      // lifts. Resolve it synchronously here instead, at the moment the
+      // finger actually lands, so tapping the box (now sitting off to the
+      // side, out of focus) reliably sends you back to the bin, and so the
+      // dragging check right below correctly skips starting a tear-drag on
+      // a tap that landed on the box rather than the focal pack.
+      const el = stageElRef.current;
+      if (el) {
+        const { x: ndcX, y: ndcY } = ndcFromClient(el, e.clientX, e.clientY);
+        hoverBin.current = raycastHitsBin(ndcX, ndcY);
       }
     }
     dragging.current = phaseRef.current === "idle" && !hoverBin.current;
@@ -1463,8 +1515,16 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
         if (stageElRef.current) stageElRef.current.style.cursor = "grab";
       }
 
+      // Same touch-vs-mouse split as the pack hover above: for touch,
+      // hoverBin is resolved once at touchdown (onDown) and must hold
+      // steady, not get overwritten every frame from a stale ndc.current.
       const stageGroup = binStageRef.current;
-      if (binOut.current && stageGroup && (phaseRef.current === "idle" || phaseRef.current === "collected")) {
+      if (
+        binOut.current &&
+        stageGroup &&
+        !pointerIsTouch.current &&
+        (phaseRef.current === "idle" || phaseRef.current === "collected")
+      ) {
         ray.setFromCamera(ndc.current, cam);
         const onBin = ray.intersectObject(stageGroup, true).length > 0;
         if (onBin !== hoverBin.current) {
@@ -1713,7 +1773,16 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
         style={{
           height: "clamp(380px, 66vh, 760px)",
           width: "100%",
-          touchAction: "none",
+          // "none" blocked page scroll anywhere a finger landed on this
+          // stage — including empty bin background nowhere near a pack —
+          // since it's a big chunk of the viewport (up to 66vh) that ate
+          // every vertical swipe. The only native gesture this element
+          // needs to intercept is the horizontal tear-drag (dx-only, see
+          // onMove); "pan-y" lets the browser handle vertical scrolling
+          // natively while still routing horizontal movement to our
+          // pointer handlers, so a mostly-vertical swipe scrolls the page
+          // and a mostly-horizontal one still tears the pack open.
+          touchAction: "pan-y",
           cursor: "default",
           outlineOffset: "4px",
         }}
