@@ -298,6 +298,30 @@ entry animation).
   rather than at scheduling time, so a hitch can't jump the animation forward.
 - **Interrupted returns.** `sendHome()` captures a `pickSeq` and bails on completion if another
   pack was picked mid-flight.
+- **Touch arm/confirm picking the wrong pack, or collapsing right after the tap.** Touch has no
+  hover, so selecting a pack in the bin is two taps: tap 1 raycasts on `pointerdown` and arms
+  (`armedId.current`) — lifts the pack the same amount desktop hover does, and it stays lifted
+  after the finger releases; tap 2 on the same pack confirms (`pickPack`). Two bugs, both in
+  `PackScene.tsx`:
+  - **Wrong pack on tap 2.** The armed pack's hover lift moves it in Z; if Z moves it *away* from
+    the camera, a still-resting neighbor can end up nearer along the same screen ray and occlude
+    it, so `onDown`'s general raycast (`raycastPackAtNdc`, nearest-hit-wins) resolves to the
+    neighbor instead. Fix: `raycastHitsPack(ndcX, ndcY, armedId)` tests the armed pack's own mesh
+    directly on tap 2, before falling back to the general raycast — occlusion by other packs no
+    longer matters for confirming the one already armed.
+  - **Lift collapses within a frame or two of the tap.** The per-frame hover raycast in `loop()`
+    (`raycastPackAtNdc(ndc.current...)`) exists to track a moving desktop mouse every frame. It
+    wasn't gated off for touch, and `ndc.current` for touch is just whatever the last `touchmove`
+    reported — stale the instant the finger stops or lifts. Left running, it kept re-raycasting
+    that stale point every frame and stomping the tap-armed `hoverId` back to `null` (or a
+    different pack) as soon as the rising pack's mesh moved off that fixed ray, so the arm
+    visibly collapsed almost immediately after the tap. A dragging finger *looked* fine only
+    because it kept feeding the same loop fresh, correct positions each frame. Fix: gate that
+    block on `!pointerIsTouch.current` — for touch, `hoverId` is owned entirely by `onDown`'s
+    arm/confirm logic and nothing else should write to it while `phase === "bin"`.
+  - There's an opt-in `?debug=1` overlay (`debugOn` state in `PackScene.tsx`) that logs every
+    down/up/raycast/ARM/CONFIRM event straight onto the page — headless touch simulation can't
+    reproduce real-device timing, so this was what actually diagnosed both bugs above.
 
 ---
 
