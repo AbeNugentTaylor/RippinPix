@@ -527,12 +527,6 @@ a:hover {
    individual widths, which is what actually keeps every gap the same. */
 .grid {
   --card-min-w: 172px;
-  /* Grid's shared 1fr columns bound growth by the whole layout's column
-     count, so a sparse row never blows up — flex-wrap's growth is per row,
-     so a trailing row with only 1-2 items left would otherwise stretch them
-     to fill the entire row width unbounded. Capping width keeps growth in
-     the same "fills out a normal row nicely" range without that runaway. */
-  --card-max-w: calc(var(--card-min-w) * 1.5);
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-6) var(--space-4);
@@ -546,30 +540,23 @@ a:hover {
 }
 
 .plate-card {
-  /* grow:1, shrink:0 — mirrors the old minmax(172px, 1fr) grid column: grows
-     to fill leftover row space, never shrinks below the floor (narrow
-     viewports wrap to fewer per row instead). */
-  flex: 1 0 var(--card-min-w);
-  max-width: var(--card-max-w);
+  /* Fixed size (no grow) — flexbox sizes each row independently, so letting
+     cards grow to fill leftover row space made a sparsely-filled row's
+     cards render bigger than a fully-packed row's. A fixed size is what
+     guarantees every row looks the same, at the cost of not stretching to
+     fill a row's trailing width. */
+  flex: 0 0 var(--card-min-w);
   perspective: 1400px;
   aspect-ratio: 63 / 88;
   will-change: transform, opacity;
 }
 
 /* A landscape card is the same physical card rotated 90deg and bumped 10%
-   larger, so its resolved width should always be (88/63 * 1.1) times a
-   portrait card's — at ANY viewport width, not just one. Flex's sizing
-   algorithm is width = basis + (grow / total-grow) * leftover-space; scaling
-   both this item's basis AND its grow factor by the same K against the
-   portrait cards' basis/grow (1 / var(--card-min-w)) makes its resolved
-   width exactly K times a portrait card's, for every leftover-space value —
-   see the flex-basis/flex-grow pair below. aspect-ratio then derives height
-   from that width the same way it does for portrait cards. */
+   larger, so its width is fixed at (88/63 * 1.1) times a portrait card's —
+   aspect-ratio then derives its height from that width the same way it
+   does for portrait cards. */
 .plate-card--landscape {
-  flex-grow: calc(88 / 63 * 1.1);
-  flex-shrink: 0;
-  flex-basis: calc(var(--card-min-w) * 88 / 63 * 1.1);
-  max-width: calc(var(--card-max-w) * 88 / 63 * 1.1);
+  flex: 0 0 calc(var(--card-min-w) * 88 / 63 * 1.1);
   aspect-ratio: 88 / 63;
   /* Shorter than its taller portrait row-mates — center it against them
      instead of leaving it pinned to the top with dead space below. */
