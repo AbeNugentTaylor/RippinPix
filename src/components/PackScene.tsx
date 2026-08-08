@@ -5,6 +5,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -171,6 +172,26 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
   const armedId = useRef<string | null>(null);
   const pointerIsTouch = useRef(false);
 
+  // Opt-in, zero-overhead-when-off diagnostic overlay (?debug=1) — the
+  // headless touch simulation used to develop the arm/confirm logic above
+  // can't reproduce whatever's actually happening on a real device, so this
+  // logs the exact same events straight onto the page instead.
+  const [debugOn, setDebugOn] = useState(false);
+  // The scene-setup effect below only runs once on mount, so any listener it
+  // registers would otherwise close over debugOn as it was at that first
+  // render (always false) and silently no-op forever once the flag flips —
+  // a ref, read at call time rather than closure-capture time, sidesteps that.
+  const debugOnRef = useRef(false);
+  const debugElRef = useRef<HTMLPreElement | null>(null);
+  const debugLogRef = useRef<string[]>([]);
+  function logDebug(line: string) {
+    if (!debugOnRef.current) return;
+    const t = new Date();
+    const stamp = `${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")}.${String(t.getMilliseconds()).padStart(3, "0")}`;
+    debugLogRef.current = [...debugLogRef.current, `${stamp} ${line}`].slice(-14);
+    if (debugElRef.current) debugElRef.current.textContent = debugLogRef.current.join("\n");
+  }
+
   const dragging = useRef(false);
   const x0 = useRef(0);
   const downX = useRef(0);
@@ -197,6 +218,12 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
   useEffect(() => {
     packPriceRef.current = packPrice;
   }, [packPrice]);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("debug") === "1") {
+      debugOnRef.current = true;
+      setDebugOn(true);
+    }
+  }, []);
 
   const runTween = (dur: number, step: (k: number) => void, done?: () => void) =>
     tween(dur, step, done, dead);
@@ -1269,6 +1296,7 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
   }
 
   function onUp(e: PointerEvent) {
+    logDebug(`up   type=${e.pointerType} phase=${phaseRef.current}`);
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     // A finger has noticeably more incidental wobble than a mouse click, so
@@ -1301,6 +1329,9 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
 
   function onDown(e: React.PointerEvent) {
     if (!rigsRef.current) return;
+    logDebug(
+      `down type=${e.pointerType} phase=${phaseRef.current} xy=${Math.round(e.clientX)},${Math.round(e.clientY)}`
+    );
     downX.current = e.clientX;
     t0Ref.current = performance.now();
     pointerIsTouch.current = e.pointerType === "touch";
@@ -1315,10 +1346,14 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
         const ndcX = ((e.clientX - r.left) / r.width - 0.5) * 2;
         const ndcY = -(((e.clientY - r.top) / r.height - 0.5) * 2);
         const id = raycastPackAtNdc(ndcX, ndcY);
+        const prevArmed = armedId.current;
+        logDebug(`  raycast id=${id ?? "null"} prevArmed=${prevArmed ?? "null"}`);
         if (id && id === armedId.current) {
           // Second touchdown on the already-armed pack — confirm now.
+          logDebug(`  CONFIRM -> pickPack(${id})`);
           pickPack(id);
         } else {
+          logDebug(`  ARM -> ${id ?? "null"}`);
           armedId.current = id;
           hoverId.current = id;
           el.style.cursor = id ? "pointer" : "default";
@@ -1580,6 +1615,15 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
         pointer.current.y = 0;
         ndc.current.set(-2, -2);
       });
+      // Diagnostic only (see debugOnRef above) — pointercancel is a classic
+      // sign the browser took over a gesture instead of delivering it to us;
+      // gesturestart/gestureend are Safari-only nonstandard events that fire
+      // during native pinch/double-tap-zoom, and simply never fire elsewhere.
+      window.addEventListener("pointercancel", (e) => {
+        logDebug(`CANCEL type=${e.pointerType}`);
+      });
+      window.addEventListener("gesturestart", () => logDebug("GESTURESTART (native zoom)"));
+      window.addEventListener("gestureend", () => logDebug("GESTUREEND"));
 
       const observer = new ResizeObserver(() => {
         const nw = el.clientWidth;
@@ -1628,21 +1672,45 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
   }));
 
   return (
-    <div
-      ref={stageElRef}
-      onPointerDown={onDown}
-      onKeyDown={onKey}
-      tabIndex={0}
-      role="application"
-      aria-label="Discount bin of booster packs — click a pack to pull it out, then swipe right across its top to tear it open"
-      style={{
-        height: "clamp(380px, 66vh, 760px)",
-        width: "100%",
-        touchAction: "none",
-        cursor: "default",
-        outlineOffset: "4px",
-      }}
-    />
+    <>
+      <div
+        ref={stageElRef}
+        onPointerDown={onDown}
+        onKeyDown={onKey}
+        tabIndex={0}
+        role="application"
+        aria-label="Discount bin of booster packs — click a pack to pull it out, then swipe right across its top to tear it open"
+        style={{
+          height: "clamp(380px, 66vh, 760px)",
+          width: "100%",
+          touchAction: "none",
+          cursor: "default",
+          outlineOffset: "4px",
+        }}
+      />
+      {debugOn && (
+        <pre
+          ref={debugElRef}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            zIndex: 9999,
+            margin: 0,
+            maxWidth: "94vw",
+            maxHeight: "40vh",
+            overflow: "auto",
+            whiteSpace: "pre-wrap",
+            background: "rgba(0,0,0,0.85)",
+            color: "#5f5",
+            fontSize: 10,
+            lineHeight: 1.4,
+            padding: 8,
+            pointerEvents: "none",
+          }}
+        />
+      )}
+    </>
   );
 });
 
