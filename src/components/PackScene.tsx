@@ -33,19 +33,9 @@ const XMAX = 2.12;
 const HOVER_LIFT_Y = 5;
 const HOVER_LIFT_Z = -2;
 const HOVER_SCALE = 1.12;
-// Touch has no hover-before-commit, so a tap arms a pack (lifts it, stays up)
-// and a second tap confirms — the lift needs to read clearly at a glance on a
-// small screen, hence the bigger multiplier over the desktop hover values.
-const HOVER_LIFT_Y_TOUCH = HOVER_LIFT_Y * 1.6;
-// Unlike desktop hover, touch has no continuous per-frame raycast tracking
-// the cursor onto the pack as it moves — arm/confirm re-raycasts the tap
-// point twice, days apart in frame time. If the armed pack recedes in Z
-// (as HOVER_LIFT_Z does for desktop), it moves *behind* its still-resting
-// neighbors from the camera's point of view, so the confirming tap's
-// raycast hits whatever's now nearest along that ray instead — a different
-// pack entirely. Keeping touch's Z lift at 0 keeps the armed pack in front.
-const HOVER_LIFT_Z_TOUCH = 0;
-const HOVER_SCALE_TOUCH = 1 + (HOVER_SCALE - 1) * 1.6;
+// Touch has no hover-before-commit, so a tap arms a pack (lifts it, stays up
+// — same lift as desktop hover, so it reads as "peek at the label," not
+// "picked") and a second tap confirms.
 const MODEL_URL = "/models/booster_pack_tcg_pack.glb";
 
 interface DressedGroup {
@@ -1450,11 +1440,23 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     const cam = cameraRef.current;
     const ray = rayRef.current;
     if (rigs && ray && cam) {
+      // Touch has no real hover: hoverId is set once per tap by onDown's
+      // arm/confirm logic and must hold steady afterward, even after the
+      // finger lifts. This continuous per-frame raycast exists for desktop
+      // mouse tracking (ndc.current follows the live cursor every frame) —
+      // for touch, ndc.current is just whatever pointermove last reported,
+      // which goes stale the instant the finger stops moving or lifts. Left
+      // unguarded, it kept re-raycasting that stale point every frame and
+      // stomping the just-armed hoverId back to null (or a different pack)
+      // as soon as the rising pack's mesh moved off that fixed ray — the
+      // pack would arm for a frame or two, then silently drop back down.
       if (phaseRef.current === "bin") {
-        const id = raycastPackAtNdc(ndc.current.x, ndc.current.y);
-        if (id !== hoverId.current) {
-          hoverId.current = id;
-          if (stageElRef.current) stageElRef.current.style.cursor = id ? "pointer" : "default";
+        if (!pointerIsTouch.current) {
+          const id = raycastPackAtNdc(ndc.current.x, ndc.current.y);
+          if (id !== hoverId.current) {
+            hoverId.current = id;
+            if (stageElRef.current) stageElRef.current.style.cursor = id ? "pointer" : "default";
+          }
         }
       } else if (hoverId.current) {
         hoverId.current = null;
@@ -1479,9 +1481,6 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
         hoverBin.current = false;
       }
 
-      const liftY = pointerIsTouch.current ? HOVER_LIFT_Y_TOUCH : HOVER_LIFT_Y;
-      const liftZ = pointerIsTouch.current ? HOVER_LIFT_Z_TOUCH : HOVER_LIFT_Z;
-      const liftScale = pointerIsTouch.current ? HOVER_SCALE_TOUCH : HOVER_SCALE;
       for (const p of Object.values(rigs)) {
         if (p.gone || !p.root.visible) continue;
         const target = hoverId.current === p.pack.id ? 1 : 0;
@@ -1514,15 +1513,15 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
         // unreadable when you're trying to peek at a specific pack.
         p.root.position.set(
           s.x,
-          s.y + h * liftY + Math.sin(t * 0.7 + s.x) * 0.04,
-          s.z + h * liftZ
+          s.y + h * HOVER_LIFT_Y + Math.sin(t * 0.7 + s.x) * 0.04,
+          s.z + h * HOVER_LIFT_Z
         );
         p.root.rotation.set(
           s.rx + h * (counter.rx - s.rx),
           s.ry * (1 - h),
           s.rz * (1 - h)
         );
-        p.root.scale.setScalar(1 + h * (liftScale - 1));
+        p.root.scale.setScalar(1 + h * (HOVER_SCALE - 1));
       }
     }
 
