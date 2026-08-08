@@ -166,11 +166,9 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
   const rayRef = useRef<THREE.Raycaster | null>(null);
   const hoverId = useRef<string | null>(null);
   const hoverBin = useRef(false);
-  // Touch selection is two-step: a tap arms/lifts a pack (armedId), a second
-  // tap on that same pack confirms it. tapWasArmed records, per pointerdown,
-  // whether the pack we just touched down on was already the armed one.
+  // Touch selection is two-step: a touchdown arms/lifts a pack (armedId), a
+  // second touchdown on that same pack confirms it immediately.
   const armedId = useRef<string | null>(null);
-  const tapWasArmed = useRef(false);
   const pointerIsTouch = useRef(false);
 
   const dragging = useRef(false);
@@ -1282,15 +1280,12 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
       Math.abs((e && e.clientX != null ? e.clientX : downX.current) - downX.current) < moveTolerance;
     const ph = phaseRef.current;
     if (ph === "bin") {
-      // hoverId drifts every frame off whatever the continuous raycast in
-      // loop() currently sees, which on a real touchscreen keeps nudging
-      // during a "still" tap from finger jitter/micro-movement — by release
-      // it can point at a neighboring pack or nothing at all. armedId only
-      // ever changes on a fresh pointerdown, so it's the stable value that
-      // actually matches what got armed at the start of this tap.
-      if (e.pointerType === "touch") {
-        if (quick && tapWasArmed.current && armedId.current) pickPack(armedId.current);
-      } else if (quick && hoverId.current) {
+      // Touch selection is resolved entirely in onDown now (see below) — a
+      // release-time decision here depends on how long/far the finger moved
+      // between down and up, which on a real touchscreen varies enough
+      // (natural hold time, incidental drift) that it was an unreliable
+      // signal. Desktop mouse still selects on click, same as before.
+      if (e.pointerType !== "touch" && quick && hoverId.current) {
         pickPack(hoverId.current);
       }
       return;
@@ -1310,19 +1305,24 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     t0Ref.current = performance.now();
     pointerIsTouch.current = e.pointerType === "touch";
     if (pointerIsTouch.current && phaseRef.current === "bin") {
-      // No hover state precedes a touch tap, so arm/confirm has to be
-      // resolved right here rather than relying on the continuous raycast
-      // in loop() — a plain tap fires no pointermove beforehand.
+      // No hover state precedes a touch tap, so arm/confirm is resolved
+      // right here on touchdown rather than on release — this is the
+      // moment the finger actually lands on a pack, so it's unaffected by
+      // however long the finger lingers or drifts before lifting off.
       const el = stageElRef.current;
       if (el) {
         const r = el.getBoundingClientRect();
         const ndcX = ((e.clientX - r.left) / r.width - 0.5) * 2;
         const ndcY = -(((e.clientY - r.top) / r.height - 0.5) * 2);
         const id = raycastPackAtNdc(ndcX, ndcY);
-        tapWasArmed.current = id !== null && id === armedId.current;
-        armedId.current = id;
-        hoverId.current = id;
-        el.style.cursor = id ? "pointer" : "default";
+        if (id && id === armedId.current) {
+          // Second touchdown on the already-armed pack — confirm now.
+          pickPack(id);
+        } else {
+          armedId.current = id;
+          hoverId.current = id;
+          el.style.cursor = id ? "pointer" : "default";
+        }
       }
     }
     dragging.current = phaseRef.current === "idle" && !hoverBin.current;
