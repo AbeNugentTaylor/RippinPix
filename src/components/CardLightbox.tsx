@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Card3D from "./Card3D";
 import CardCaptionOverlay from "./CardCaptionOverlay";
 import type { Card as CardT } from "@/lib/types";
@@ -11,6 +11,15 @@ interface CardLightboxProps {
 }
 
 export default function CardLightbox({ card, onClose }: CardLightboxProps) {
+  const [holoHidden, setHoloHidden] = useState(false);
+
+  // Reset so the next card opened always starts with the effect on.
+  const [prevCard, setPrevCard] = useState(card);
+  if (card !== prevCard) {
+    setPrevCard(card);
+    setHoloHidden(false);
+  }
+
   useEffect(() => {
     if (!card) return;
     const onKey = (e: KeyboardEvent) => {
@@ -34,6 +43,16 @@ export default function CardLightbox({ card, onClose }: CardLightboxProps) {
       <button className="lightbox-close" onClick={onClose} aria-label="Close">
         Close
       </button>
+      {card.holo && (
+        <button
+          className="lightbox-holo-toggle"
+          onClick={() => setHoloHidden((v) => !v)}
+          aria-pressed={holoHidden}
+          aria-label={holoHidden ? "Show holo foil effect" : "Hide holo foil effect"}
+        >
+          {holoHidden ? "Show Holo" : "Hide Holo"}
+        </button>
+      )}
       <div
         className={`lightbox-card-frame${isLandscape ? " lightbox-card-frame--landscape" : ""}`}
         onClick={(e) => e.stopPropagation()}
@@ -42,7 +61,7 @@ export default function CardLightbox({ card, onClose }: CardLightboxProps) {
           photoUrl={card.photoUrl}
           crop={card.crop}
           rarity={card.rarity}
-          holo={card.holo}
+          holo={card.holo && !holoHidden}
           holoPattern={card.holoPattern}
           orientation={card.orientation}
         />
