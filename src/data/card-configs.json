@@ -9,12 +9,13 @@
       "y": 50,
       "zoom": 1
     },
-    "rarity": "uncommon",
-    "holo": false,
+    "rarity": "holo",
+    "holo": true,
+    "holoPattern": "none",
     "attributes": [],
     "date": "2023",
     "medium": "Film - Kodak Gold",
-    "updatedAt": "2026-08-06T01:48:58.856Z"
+    "updatedAt": "2026-08-08T12:53:55.986Z"
   },
   "sh/1": {
     "designId": "sh",
@@ -26,12 +27,14 @@
       "y": 86.23054911079521,
       "zoom": 1
     },
-    "rarity": "uncommon",
-    "holo": false,
+    "rarity": "holo",
+    "holo": true,
+    "holoPattern": "cosmos",
     "attributes": [],
     "title": "Something Something Bull, Something Something Horns",
+    "date": "2023",
     "medium": "Film - Lomo Purple",
-    "updatedAt": "2026-08-06T01:55:37.054Z"
+    "updatedAt": "2026-08-08T12:53:25.654Z"
   },
   "hk/1": {
     "designId": "hk",
@@ -43,12 +46,278 @@
       "y": 87.09830262855516,
       "zoom": 1.65
     },
-    "rarity": "common",
-    "holo": false,
+    "rarity": "holo",
+    "holo": true,
+    "holoPattern": "cosmos",
     "attributes": [],
     "title": "The Rain in Hong Kong Falls Mainly on the...",
     "date": "2023",
     "medium": "Film - Unknown Stock",
-    "updatedAt": "2026-08-06T01:57:25.280Z"
+    "updatedAt": "2026-08-08T12:53:37.417Z"
+  },
+  "vienna/1": {
+    "designId": "vienna",
+    "local": 1,
+    "fileName": "01.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\VV25 Image12.jpg",
+    "crop": {
+      "x": 50,
+      "y": 50,
+      "zoom": 1
+    },
+    "rarity": "uncommon",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Lovers Lane",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T12:57:30.784Z"
+  },
+  "vienna/2": {
+    "designId": "vienna",
+    "local": 2,
+    "fileName": "02.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\VV25 Image16.jpg",
+    "crop": {
+      "x": 39.898963241649064,
+      "y": 68.07910533109737,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Sole Survivors",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:03:40.357Z"
+  },
+  "vienna/3": {
+    "designId": "vienna",
+    "local": 3,
+    "fileName": "03.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\VV25 Image34.jpg",
+    "crop": {
+      "x": 51.01010402262573,
+      "y": 43.49152585463944,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "They better be careful",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:05:32.997Z"
+  },
+  "vienna/4": {
+    "designId": "vienna",
+    "local": 4,
+    "fileName": "04.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\VV25 Image35.jpg",
+    "crop": {
+      "x": 50,
+      "y": 50,
+      "zoom": 1
+    },
+    "rarity": "holo",
+    "holo": true,
+    "holoPattern": "cosmos",
+    "attributes": [],
+    "title": "Just a stranger on the",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:09:38.263Z"
+  },
+  "vienna/5": {
+    "designId": "vienna",
+    "local": 5,
+    "fileName": "05.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\EL2550.jpg",
+    "crop": {
+      "x": 52.52524618493887,
+      "y": 65.18644132769853,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Smashed to Pieces",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:10:54.236Z"
+  },
+  "weihn/1": {
+    "designId": "weihn",
+    "local": 1,
+    "fileName": "01.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image41.jpg",
+    "crop": {
+      "x": 0,
+      "y": 61.570621254593405,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Candlenights",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:13:25.241Z"
+  },
+  "weihn/2": {
+    "designId": "weihn",
+    "local": 2,
+    "fileName": "02.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image42.jpg",
+    "crop": {
+      "x": 47.474726071810224,
+      "y": 53.7175199471981,
+      "zoom": 1.5
+    },
+    "rarity": "holo",
+    "holo": true,
+    "holoPattern": "cosmos",
+    "attributes": [],
+    "title": "A Hearty Specimen",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:18:30.151Z"
+  },
+  "weihn/3": {
+    "designId": "weihn",
+    "local": 3,
+    "fileName": "03.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image53.jpg",
+    "crop": {
+      "x": 50,
+      "y": 50,
+      "zoom": 1
+    },
+    "rarity": "uncommon",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Even a Christmas Tree can BEAR Fruit",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:20:33.298Z"
+  },
+  "leaks/1": {
+    "designId": "leaks",
+    "local": 1,
+    "fileName": "01.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image52.jpg",
+    "crop": {
+      "x": 63.13132455088358,
+      "y": 48.19208996344744,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Surfin' Santa Sellin' Smallclocks",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:22:53.919Z"
+  },
+  "weihn/4": {
+    "designId": "weihn",
+    "local": 4,
+    "fileName": "04.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image52.jpg",
+    "crop": {
+      "x": 63.13132455088358,
+      "y": 48.19208996344744,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Surfin' Santa Sellin' Smallclocks",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:23:17.236Z"
+  },
+  "weihn/5": {
+    "designId": "weihn",
+    "local": 5,
+    "fileName": "05.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image44.jpg",
+    "crop": {
+      "x": 50,
+      "y": 50,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Fear Can't Be Trusted",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:26:13.524Z"
+  },
+  "weihn/6": {
+    "designId": "weihn",
+    "local": 6,
+    "fileName": "06.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image49.jpg",
+    "crop": {
+      "x": 50,
+      "y": 50,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Simply, Having",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:27:27.733Z"
+  },
+  "weihn/7": {
+    "designId": "weihn",
+    "local": 7,
+    "fileName": "07.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image34.jpg",
+    "crop": {
+      "x": 68.18181692076132,
+      "y": 47.83050696302258,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "attributes": [],
+    "title": "Riesenrad",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:29:04.781Z"
+  },
+  "weihn/8": {
+    "designId": "weihn",
+    "local": 8,
+    "fileName": "08.jpg",
+    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image50.jpg",
+    "crop": {
+      "x": 50,
+      "y": 50,
+      "zoom": 1
+    },
+    "rarity": "uncommon",
+    "holo": false,
+    "holoPattern": "cosmos",
+    "attributes": [],
+    "title": "After Hours",
+    "date": "2025",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-08T13:36:05.545Z"
   }
 }
