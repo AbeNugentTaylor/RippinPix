@@ -554,6 +554,11 @@ a:hover {
 .plate-card--landscape {
   grid-column: span 2;
   justify-self: center;
+  /* .grid's align-items: start pins every card to the top of its row —
+     right for same-height portrait cards sharing a row, but it left this
+     shorter box stranded near the top with dead space below instead of
+     centered against its taller row-mates. */
+  align-self: center;
   width: calc((100% - var(--space-4)) / 2 * 88 / 63);
   aspect-ratio: 88 / 63;
 }
