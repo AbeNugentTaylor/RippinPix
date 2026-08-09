@@ -46,7 +46,10 @@ export default function CardLightbox({ card, onClose }: CardLightboxProps) {
       {card.holo && (
         <button
           className="lightbox-holo-toggle"
-          onClick={() => setHoloHidden((v) => !v)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setHoloHidden((v) => !v);
+          }}
           aria-pressed={holoHidden}
           aria-label={holoHidden ? "Show holo foil effect" : "Hide holo foil effect"}
         >
