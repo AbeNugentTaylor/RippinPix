@@ -234,7 +234,11 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
       if (!res.ok) {
         setMessage(data.error ?? "Save failed");
       } else {
-        setMessage(`Saved as ${designId}/${String(local).padStart(2, "0")}`);
+        const slot = `${designId}/${String(local).padStart(2, "0")}`;
+        // Remote-mode saves push straight to GitHub and the response carries
+        // the bumped version; local saves are just a disk write (a separate
+        // "Push to GitHub" step handles the rest), so say so accordingly.
+        setMessage(data.version ? `Saved & pushed ${slot} as v${data.version}` : `Saved as ${slot}`);
         onSaved();
       }
     } catch {

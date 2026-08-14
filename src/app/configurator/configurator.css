@@ -103,6 +103,11 @@
   background: var(--color-accent-500);
 }
 
+.cfg-picker-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .cfg-image-thumb-wrap {
   position: relative;
 }

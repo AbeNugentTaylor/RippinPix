@@ -97,6 +97,43 @@ npm run dev -- -H 0.0.0.0
 
 then visit `http://<your-computer's-LAN-IP>:3000/configurator` from the phone.
 
+### Remote configurator (deployed, password-gated)
+
+The configurator can also run on the actual deployed site instead of `npm run dev` — useful if
+you want to manage cards from anywhere without keeping a machine on your Wi-Fi. This is a
+deliberately separate, opt-in mode: by default a deployed build behaves exactly like today (hard
+404 on `/configurator` and its API routes).
+
+In remote mode there's no local filesystem to write to (Netlify Functions don't have one), so
+every **Save card** commits the photo, the updated `card-configs.json`, and a bumped
+`package.json` version straight to GitHub in one push via [`src/lib/github-content.server.ts`](src/lib/github-content.server.ts)
+— there's no separate "Push to GitHub" step in this mode, the save *is* the push. The route is
+protected by HTTP Basic Auth (see [`src/proxy.ts`](src/proxy.ts)) — your browser will prompt for a
+password the first time.
+
+To turn it on, set these as **Netlify environment variables** (Site configuration → Environment
+variables), available to both the build and the functions:
+
+| Variable | Purpose |
+| --- | --- |
+| `CONFIGURATOR_REMOTE` | Set to `1` to enable. Unset = configurator stays hard-404'd, same as today. |
+| `CONFIGURATOR_PASSWORD` | The Basic Auth password. If `CONFIGURATOR_REMOTE=1` and this is unset, the configurator fails closed (denies everything) rather than opening up. |
+| `GITHUB_TOKEN` | A fine-grained [Personal Access Token](https://github.com/settings/personal-access-tokens/new), scoped to **this repo only**, with **Contents: Read and write** permission — nothing else. |
+| `GITHUB_REPO` | `owner/repo`, e.g. `AbeNugentTaylor/RippinPix`. |
+| `GITHUB_BRANCH` | Branch to commit to. Defaults to `main` if unset — make sure this is the branch Netlify auto-deploys from. |
+
+Notes:
+
+- New cards still need Netlify's next auto-rebuild to appear on the live site — same as a local
+  `git push` today, just triggered remotely.
+- Because `CONFIGURATOR_REMOTE` is read at build time too, flipping it off in the dashboard
+  without a redeploy won't hide the page's URL — but Basic Auth (checked per-request, not baked
+  into the build) is what's actually protecting it either way.
+- Uploaded photos are downscaled/re-encoded client-side before sending, since Netlify's function
+  request size limit is well under what an unedited phone photo produces. Full-resolution
+  originals are preserved by the local `npm run dev` flow above.
+- One shared password over HTTPS is meant for a single owner, not a multi-user system.
+
 ## Deploying
 
 A server component reads `public/photos/` at build time to build the photo

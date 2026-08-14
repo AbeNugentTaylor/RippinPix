@@ -6,14 +6,23 @@ import PhotoPicker, { type UploadImage } from "./PhotoPicker";
 import CardEditor, { type EditorTarget } from "./CardEditor";
 import ImportedList from "./ImportedList";
 import GitPushPanel from "./GitPushPanel";
+import { compressImage } from "@/lib/image-compress";
 import type { CardConfig } from "@/lib/types";
 
 let uploadIdSeq = 0;
 
-export default function ConfiguratorApp() {
+interface ConfiguratorAppProps {
+  // True only on the deployed, password-gated instance (see
+  // remote-mode.server.ts's isRemoteBackend). Local dev is always false —
+  // it keeps the original filesystem-browsing + local-git flow untouched.
+  remote?: boolean;
+}
+
+export default function ConfiguratorApp({ remote = false }: ConfiguratorAppProps) {
   const [target, setTarget] = useState<EditorTarget | null>(null);
   const [configs, setConfigs] = useState<Record<string, CardConfig>>({});
   const [uploads, setUploads] = useState<UploadImage[]>([]);
+  const [compressing, setCompressing] = useState(false);
   // Bumped on every config refresh so GitPushPanel knows to re-check git
   // status — otherwise a save/delete never re-fetches its "pending" count.
   const [changeTick, setChangeTick] = useState(0);
@@ -39,7 +48,7 @@ export default function ConfiguratorApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const addUploads = (files: File[]) => {
+  const appendUploads = (files: File[]) => {
     const added = files.map((file) => ({
       id: `u${++uploadIdSeq}`,
       file,
@@ -47,6 +56,21 @@ export default function ConfiguratorApp() {
     }));
     setUploads((u) => [...u, ...added]);
     if (added.length) setTarget({ kind: "upload", image: added[0] });
+  };
+
+  const addUploads = async (files: File[]) => {
+    if (!remote) {
+      appendUploads(files);
+      return;
+    }
+    // Remote saves go over the network to a Netlify Function with a body-size
+    // ceiling well under an unedited phone photo — shrink client-side first.
+    setCompressing(true);
+    try {
+      appendUploads(await Promise.all(files.map((f) => compressImage(f))));
+    } finally {
+      setCompressing(false);
+    }
   };
 
   const removeUpload = (id: string) => {
@@ -78,10 +102,20 @@ export default function ConfiguratorApp() {
       <header className="cfg-header">
         <h1>RippinPix card configurator</h1>
         <p>
-          Local-only tool — pick a photo, crop it into the card frame, tag rarity and attributes,
-          save. Saving copies the photo into <code>public/photos/</code> and writes{" "}
-          <code>src/data/card-configs.json</code>; push to hand the cards off to the site.
-          Click a saved card below to edit it.
+          {remote ? (
+            <>
+              Pick a photo, crop it into the card frame, tag rarity and attributes, save — each
+              save commits and pushes straight to GitHub, no separate step. The live site picks it
+              up after Netlify&rsquo;s next automatic rebuild. Click a saved card below to edit it.
+            </>
+          ) : (
+            <>
+              Local-only tool — pick a photo, crop it into the card frame, tag rarity and
+              attributes, save. Saving copies the photo into <code>public/photos/</code> and
+              writes <code>src/data/card-configs.json</code>; push to hand the cards off to the
+              site. Click a saved card below to edit it.
+            </>
+          )}
         </p>
       </header>
       <div className="cfg-layout">
@@ -92,11 +126,14 @@ export default function ConfiguratorApp() {
             onSelect={(image) => setTarget({ kind: "upload", image })}
             onRemove={removeUpload}
             selectedId={target?.kind === "upload" ? target.image.id : null}
+            busy={compressing}
           />
-          <FolderBrowser
-            onSelectImage={(image) => setTarget({ kind: "new", image })}
-            selectedPath={target?.kind === "new" ? target.image.path : null}
-          />
+          {!remote && (
+            <FolderBrowser
+              onSelectImage={(image) => setTarget({ kind: "new", image })}
+              selectedPath={target?.kind === "new" ? target.image.path : null}
+            />
+          )}
         </div>
         {target ? (
           <CardEditor
@@ -108,7 +145,9 @@ export default function ConfiguratorApp() {
           />
         ) : (
           <div className="cfg-panel cfg-panel--placeholder">
-            Choose a photo (from this device, or the folder browser), or a saved card, to start.
+            {remote
+              ? "Choose a photo from this device, or a saved card, to start."
+              : "Choose a photo (from this device, or the folder browser), or a saved card, to start."}
           </div>
         )}
         <ImportedList
@@ -118,7 +157,7 @@ export default function ConfiguratorApp() {
           onDeleted={refresh}
         />
       </div>
-      <GitPushPanel refreshSignal={changeTick} />
+      {!remote && <GitPushPanel refreshSignal={changeTick} />}
     </div>
   );
 }

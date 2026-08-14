@@ -15,13 +15,16 @@ interface PhotoPickerProps {
   onSelect: (image: UploadImage) => void;
   onRemove: (id: string) => void;
   selectedId?: string | null;
+  // True while picked files are being compressed (remote mode only) — the
+  // picker stays disabled and says so rather than looking stuck.
+  busy?: boolean;
 }
 
 // Phone-friendly counterpart to FolderBrowser: no filesystem to browse from a
 // phone, so this hands off to the device's native photo picker instead —
 // on iOS/Android that picker surfaces whatever Lightroom mobile just
 // exported/shared to the camera roll. Works from a laptop browser too.
-export default function PhotoPicker({ images, onAdd, onSelect, onRemove, selectedId }: PhotoPickerProps) {
+export default function PhotoPicker({ images, onAdd, onSelect, onRemove, selectedId, busy = false }: PhotoPickerProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   return (
@@ -30,8 +33,8 @@ export default function PhotoPicker({ images, onAdd, onSelect, onRemove, selecte
       <p className="cfg-picker-hint">
         In Lightroom, export/share the picks to your camera roll first, then choose them here.
       </p>
-      <button type="button" className="cfg-picker-btn" onClick={() => inputRef.current?.click()}>
-        Choose photos…
+      <button type="button" className="cfg-picker-btn" disabled={busy} onClick={() => inputRef.current?.click()}>
+        {busy ? "Compressing…" : "Choose photos…"}
       </button>
       <input
         ref={inputRef}

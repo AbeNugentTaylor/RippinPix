@@ -3,8 +3,10 @@ export function configKey(designId: string, local: number): string {
   return `${designId}/${local}`;
 }
 
-// Client-safe mirror of card-configs.server.ts's nextLocalSlot, operating on
-// an already-fetched configs map instead of reading the file itself.
+// First empty 1..total slot for a design, given an already-fetched configs
+// map — shared by the client-side editor and both server-side (local fs /
+// remote GitHub) save routes, so the "next free slot" logic lives in one
+// place regardless of where the configs map came from.
 export function firstEmptySlot(
   designId: string,
   total: number,
