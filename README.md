@@ -105,11 +105,13 @@ deliberately separate, opt-in mode: by default a deployed build behaves exactly 
 404 on `/configurator` and its API routes).
 
 In remote mode there's no local filesystem to write to (Netlify Functions don't have one), so
-every **Save card** commits the photo, the updated `card-configs.json`, and a bumped
-`package.json` version straight to GitHub in one push via [`src/lib/github-content.server.ts`](src/lib/github-content.server.ts)
-— there's no separate "Push to GitHub" step in this mode, the save *is* the push. The route is
-protected by HTTP Basic Auth (see [`src/proxy.ts`](src/proxy.ts)) — your browser will prompt for a
-password the first time.
+every **Save card** commits the photo and the updated `card-configs.json` to a **staging branch**
+on GitHub instead — queued there, not live yet. Once you've built up a batch you're happy with,
+hit **Publish** (the same panel that handles local pushes) to bump the version once and
+fast-forward the live branch to everything you've queued. See
+[`src/lib/github-content.server.ts`](src/lib/github-content.server.ts) for the commit/publish
+mechanics. The route is protected by HTTP Basic Auth (see [`src/proxy.ts`](src/proxy.ts)) — your
+browser will prompt for a password the first time.
 
 To turn it on, set these as **Netlify environment variables** (Site configuration → Environment
 variables), scoped to "Same value in all deploy contexts" so there's exactly one value each,
@@ -119,9 +121,10 @@ not a different one per context:
 | --- | --- |
 | `CONFIGURATOR_REMOTE` | Set to `1` to enable. Unset = configurator stays hard-404'd, same as today. |
 | `CONFIGURATOR_PASSWORD` | The Basic Auth password. If `CONFIGURATOR_REMOTE=1` and this is unset, the configurator fails closed (denies everything) rather than opening up. |
-| `GITHUB_TOKEN` | A fine-grained [Personal Access Token](https://github.com/settings/personal-access-tokens/new), scoped to **this repo only**, with **Contents: Read and write** permission — nothing else. |
+| `GITHUB_TOKEN` | A fine-grained [Personal Access Token](https://github.com/settings/personal-access-tokens/new), scoped to **this repo only**, with **Contents: Read and write** permission — nothing else. If saves 403 specifically on `git/blobs`, your fine-grained token may be hitting a known GitHub platform gap in Git Data API support; a classic token with `repo` scope is the reliable fallback (broader access, trade off accordingly). |
 | `GITHUB_REPO` | `owner/repo`, e.g. `AbeNugentTaylor/RippinPix`. |
-| `GITHUB_BRANCH` | Branch to commit to, case-sensitive (`main`, not `MAIN`). Defaults to `main` if unset — make sure this is the branch Netlify auto-deploys from. |
+| `GITHUB_BRANCH` | The live branch, case-sensitive (`main`, not `MAIN`). Defaults to `main` if unset — make sure this is the branch Netlify auto-deploys from. |
+| `GITHUB_STAGING_BRANCH` | Branch queued cards land on before publishing. Defaults to `configurator-staging` if unset — auto-created from the live branch the first time it's needed, no manual setup required. |
 
 **After adding, editing, or removing any of these, trigger a fresh deploy** — Deploys tab →
 Trigger deploy → "Clear cache and deploy site". `@netlify/plugin-nextjs` bakes these into the
@@ -130,8 +133,11 @@ its own, even though Netlify's UI doesn't make that obvious.
 
 Notes:
 
-- New cards still need Netlify's next auto-rebuild to appear on the live site — same as a local
-  `git push` today, just triggered remotely.
+- Published changes still need Netlify's next auto-rebuild to appear on the live site — same as a
+  local `git push` today, just triggered remotely.
+- The staging branch is a real GitHub branch, so it survives closing the tab, works the same from
+  multiple devices, and is inspectable/diffable on GitHub like anything else — it's not
+  browser-local state.
 - Uploaded photos are downscaled/re-encoded client-side before sending, since Netlify's function
   request size limit is well under what an unedited phone photo produces. Full-resolution
   originals are preserved by the local `npm run dev` flow above.

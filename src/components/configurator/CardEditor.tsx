@@ -235,10 +235,9 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
         setMessage(data.error ?? "Save failed");
       } else {
         const slot = `${designId}/${String(local).padStart(2, "0")}`;
-        // Remote-mode saves push straight to GitHub and the response carries
-        // the bumped version; local saves are just a disk write (a separate
-        // "Push to GitHub" step handles the rest), so say so accordingly.
-        setMessage(data.version ? `Saved & pushed ${slot} as v${data.version}` : `Saved as ${slot}`);
+        // Remote-mode saves land on the staging branch, not live — say so,
+        // since "Saved" alone would wrongly imply it's already on the site.
+        setMessage(data.queued ? `Queued ${slot} — publish when ready` : `Saved as ${slot}`);
         onSaved();
       }
     } catch {

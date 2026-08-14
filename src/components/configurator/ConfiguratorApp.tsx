@@ -117,8 +117,9 @@ export default function ConfiguratorApp({ remote = false }: ConfiguratorAppProps
           {remote ? (
             <>
               Pick a photo, crop it into the card frame, tag rarity and attributes, save — each
-              save commits and pushes straight to GitHub, no separate step. The live site picks it
-              up after Netlify&rsquo;s next automatic rebuild. Click a saved card below to edit it.
+              save queues onto a staging branch. Nothing goes live until you hit <strong>Publish</strong>{" "}
+              below, so you can build up a batch of cards before pushing them all at once. Click a
+              saved (queued) card below to edit it.
             </>
           ) : (
             <>
@@ -170,7 +171,7 @@ export default function ConfiguratorApp({ remote = false }: ConfiguratorAppProps
           onDeleted={refresh}
         />
       </div>
-      {!remote && <GitPushPanel refreshSignal={changeTick} />}
+      <GitPushPanel refreshSignal={changeTick} remote={remote} />
     </div>
   );
 }

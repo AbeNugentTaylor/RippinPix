@@ -7,20 +7,22 @@ import { getCardConfigsRemote } from "@/lib/card-configs.remote.server";
 import { firstEmptySlot } from "@/lib/card-key";
 import { describeReadError } from "@/lib/cloud-file.server";
 import { isRemoteBackend, isRemoteModeEnabled } from "@/lib/remote-mode.server";
-import { bumpPackageVersion, commitFiles, getFileMeta, type CommitWrite } from "@/lib/github-content.server";
+import { commitFiles, ensureBranch, getFileMeta, githubEnv, stagingBranch, type CommitWrite } from "@/lib/github-content.server";
 import type { Attribute, CardConfig, CardOrientation, Crop, HoloPattern, Rarity } from "@/lib/types";
 
 // Local dev: copies a chosen photo into public/photos/ and upserts
 // src/data/card-configs.json directly on disk. Deployed remote mode (see
-// isRemoteBackend): commits the same two files (plus a version bump)
-// straight to GitHub instead, since a Netlify Function has no persistent
-// filesystem to write to. Both paths are blocked entirely unless the
-// configurator is enabled at all (see isRemoteModeEnabled).
+// isRemoteBackend): commits the same two files to a staging branch instead
+// (see github-content.server.ts), since a Netlify Function has no
+// persistent filesystem to write to and there's no "local, unpushed" state
+// to hold changes in otherwise. A separate Publish action (git-push route)
+// bumps the version once and fast-forwards the live branch to staging's
+// tip. Both paths are blocked entirely unless the configurator is enabled
+// at all (see isRemoteModeEnabled).
 const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "holo", "secret"];
 const HOLO_PATTERNS: HoloPattern[] = ["none", "cosmos", "stripes", "sunburst"];
 const ORIENTATIONS: CardOrientation[] = ["portrait", "landscape"];
-const PACKAGE_JSON_PATH = "package.json";
 
 interface SaveBody {
   sourcePath?: string;
@@ -219,10 +221,13 @@ async function savePostLocal(body: SaveBody, uploadFile: File | null, total: num
 }
 
 // Deployed remote mode: no persistent filesystem, so every save commits the
-// photo + updated card-configs.json + a bumped package.json version straight
-// to GitHub in one atomic commit (see github-content.server.ts) — there's no
-// separate local-staging/push step here, the save *is* the push.
+// photo + updated card-configs.json to the staging branch (see
+// github-content.server.ts) — queued there until a separate Publish action
+// fast-forwards the live branch to staging's tip.
 async function savePostRemote(body: SaveBody, uploadFile: File | null, total: number) {
+  const branch = stagingBranch();
+  await ensureBranch(branch, githubEnv().branch);
+
   let configs: Record<string, CardConfig>;
   try {
     configs = await getCardConfigsRemote();
@@ -254,7 +259,7 @@ async function savePostRemote(body: SaveBody, uploadFile: File | null, total: nu
     const oldPath = `public/photos/${editing.designId}/${editing.fileName}`;
     const newPath = `${destDir}/${fileName}`;
     if (oldPath !== newPath) {
-      const oldMeta = await getFileMeta(oldPath);
+      const oldMeta = await getFileMeta(oldPath, branch);
       if (!oldMeta.sha) {
         return NextResponse.json(
           { error: "Original photo not found on GitHub — it may have been moved or deleted since." },
@@ -291,26 +296,13 @@ async function savePostRemote(body: SaveBody, uploadFile: File | null, total: nu
   nextConfigs[key] = config;
   writes.push({ path: CARD_CONFIGS_REL_PATH, content: JSON.stringify(nextConfigs, null, 2) + "\n" });
 
-  let version: string | undefined;
-  const pkgMeta = await getFileMeta(PACKAGE_JSON_PATH);
-  if (pkgMeta.text) {
-    const bumped = bumpPackageVersion(pkgMeta.text);
-    writes.push({ path: PACKAGE_JSON_PATH, content: bumped.text });
-    version = bumped.version;
-  }
-
   try {
-    await commitFiles({
-      message: `Add ${key} via remote configurator${version ? `\n\nv${version}` : ""}`,
-      writes,
-      deletes,
-      reuseBlob,
-    });
+    await commitFiles({ branch, message: `Queue ${key} via remote configurator`, writes, deletes, reuseBlob });
   } catch (err) {
-    return NextResponse.json({ error: `Push to GitHub failed: ${(err as Error).message}` }, { status: 502 });
+    return NextResponse.json({ error: `Could not queue this save: ${(err as Error).message}` }, { status: 502 });
   }
 
-  return NextResponse.json({ key, config, version });
+  return NextResponse.json({ key, config, queued: true });
 }
 
 export async function DELETE(request: NextRequest) {
@@ -326,6 +318,9 @@ export async function DELETE(request: NextRequest) {
 }
 
 async function deletePostRemote(key: string) {
+  const branch = stagingBranch();
+  await ensureBranch(branch, githubEnv().branch);
+
   let configs: Record<string, CardConfig>;
   try {
     configs = await getCardConfigsRemote();
@@ -342,23 +337,11 @@ async function deletePostRemote(key: string) {
   const writes: CommitWrite[] = [{ path: CARD_CONFIGS_REL_PATH, content: JSON.stringify(nextConfigs, null, 2) + "\n" }];
   const deletes = [`public/photos/${existing.designId}/${existing.fileName}`];
 
-  let version: string | undefined;
-  const pkgMeta = await getFileMeta(PACKAGE_JSON_PATH);
-  if (pkgMeta.text) {
-    const bumped = bumpPackageVersion(pkgMeta.text);
-    writes.push({ path: PACKAGE_JSON_PATH, content: bumped.text });
-    version = bumped.version;
-  }
-
   try {
-    await commitFiles({
-      message: `Remove ${key} via remote configurator${version ? `\n\nv${version}` : ""}`,
-      writes,
-      deletes,
-    });
+    await commitFiles({ branch, message: `Queue removal of ${key} via remote configurator`, writes, deletes });
   } catch (err) {
-    return NextResponse.json({ error: `Push to GitHub failed: ${(err as Error).message}` }, { status: 502 });
+    return NextResponse.json({ error: `Could not queue this removal: ${(err as Error).message}` }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, version });
+  return NextResponse.json({ ok: true, queued: true });
 }

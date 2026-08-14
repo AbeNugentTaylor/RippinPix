@@ -8,21 +8,28 @@
 // between "what the build embedded" and "what got fetched". Only the
 // configurator's own API route (a request-time Netlify Function, which has
 // no persistent filesystem) needs this GitHub-backed path.
-import { getFileMeta } from "./github-content.server";
+//
+// Reads come from the staging branch, not the live branch — that's the
+// "what am I currently building toward publishing" view, which starts out
+// identical to live and only diverges once a card gets queued.
+import { ensureBranch, getFileMeta, githubEnv, stagingBranch } from "./github-content.server";
 import { CARD_CONFIGS_REL_PATH } from "./card-configs.server";
 import type { CardConfig } from "./types";
 
 export async function getCardConfigsRemote(): Promise<Record<string, CardConfig>> {
-  const { sha, text } = await getFileMeta(CARD_CONFIGS_REL_PATH);
+  const { branch: liveBranch } = githubEnv();
+  const branch = stagingBranch();
+  await ensureBranch(branch, liveBranch);
+
+  const { sha, text } = await getFileMeta(CARD_CONFIGS_REL_PATH, branch);
   // card-configs.json always exists in this repo — a missing sha here means
-  // GITHUB_REPO/GITHUB_BRANCH point somewhere that doesn't have it (wrong
-  // repo, wrong branch, typo), not a legitimately-empty project. Throw
-  // instead of silently returning {}, so that ends up as a visible error
-  // instead of a confusing "no saved cards".
+  // GITHUB_REPO points somewhere that doesn't have it (wrong repo, typo),
+  // not a legitimately-empty project. Throw instead of silently returning
+  // {}, so that ends up as a visible error instead of a confusing "no saved
+  // cards".
   if (sha === null) {
     const repo = process.env.GITHUB_REPO ?? "(unset)";
-    const branch = process.env.GITHUB_BRANCH || "main";
-    throw new Error(`${CARD_CONFIGS_REL_PATH} not found in ${repo}@${branch} — check GITHUB_REPO and GITHUB_BRANCH.`);
+    throw new Error(`${CARD_CONFIGS_REL_PATH} not found in ${repo}@${branch} — check GITHUB_REPO.`);
   }
   if (!text) return {};
   try {

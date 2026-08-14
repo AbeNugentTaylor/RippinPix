@@ -1,8 +1,13 @@
 // Fetch-based wrapper over GitHub's REST + Git Data API — no SDK dependency,
-// since the whole surface area needed here is ~7 endpoints. Backs remote-mode
+// since the whole surface area needed here is ~10 endpoints. Backs remote-mode
 // card saves: the Contents API alone can only write one file per commit, so
 // an atomic "photo + card-configs.json + package.json" save goes through the
 // low-level blob -> tree -> commit -> ref-update sequence instead.
+//
+// Saves land on a staging branch, not the live branch directly — see
+// stagingBranch() below and card-config/route.ts's remote handlers. A
+// separate "Publish" action (git-push route, remote branch) fast-forwards
+// the live branch to staging's tip once the owner is happy with a batch.
 const GITHUB_API = "https://api.github.com";
 
 export class GitHubApiError extends Error {
@@ -16,7 +21,7 @@ export class GitHubApiError extends Error {
 export interface GitHubEnv {
   token: string;
   repo: string; // "owner/repo"
-  branch: string;
+  branch: string; // the live/production branch, e.g. "main"
 }
 
 export function githubEnv(): GitHubEnv {
@@ -26,6 +31,12 @@ export function githubEnv(): GitHubEnv {
     throw new Error("Remote mode requires GITHUB_TOKEN and GITHUB_REPO to be set.");
   }
   return { token, repo, branch: process.env.GITHUB_BRANCH || "main" };
+}
+
+// The queue branch every remote save/delete targets. Auto-created from the
+// live branch's tip the first time it's needed (see ensureBranch).
+export function stagingBranch(): string {
+  return process.env.GITHUB_STAGING_BRANCH || "configurator-staging";
 }
 
 async function gh<T>(path: string, init?: RequestInit): Promise<T> {
@@ -49,17 +60,86 @@ async function gh<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function refSha(branch: string): Promise<string | null> {
+  const { repo } = githubEnv();
+  try {
+    const ref = await gh<{ object: { sha: string } }>(`/repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
+    return ref.object.sha;
+  } catch (err) {
+    if (err instanceof GitHubApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+// Idempotent: if `branch` already exists, no-op. Otherwise creates it
+// pointing at `fromBranch`'s current tip, so a fresh staging branch always
+// starts out identical to live.
+export async function ensureBranch(branch: string, fromBranch: string): Promise<void> {
+  const { repo } = githubEnv();
+  if ((await refSha(branch)) !== null) return;
+  const fromSha = await refSha(fromBranch);
+  if (!fromSha) throw new Error(`Cannot create "${branch}" — base branch "${fromBranch}" was not found.`);
+  await gh(`/repos/${repo}/git/refs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: fromSha }),
+  });
+}
+
+// Moves `branch`'s ref to `toSha`. force:false means this only succeeds if
+// it's a true fast-forward — if branch has moved independently in the
+// meantime (e.g. someone pushed to it directly), this throws a
+// GitHubApiError(422) rather than silently overwriting that history.
+export async function fastForwardBranch(branch: string, toSha: string): Promise<void> {
+  const { repo } = githubEnv();
+  await gh(`/repos/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sha: toSha, force: false }),
+  });
+}
+
+export interface CompareFile {
+  status: string; // short code: "A" | "M" | "D" | "R" | other
+  path: string;
+}
+
+const COMPARE_STATUS_CODES: Record<string, string> = {
+  added: "A",
+  modified: "M",
+  removed: "D",
+  renamed: "R",
+  copied: "C",
+  changed: "M",
+  unchanged: " ",
+};
+
+// What's queued on `head` (staging) but not yet on `base` (live) — backs the
+// "N cards pending publish" display, reusing GitHub's own diff instead of
+// hand-rolling one against two fetched card-configs.json snapshots.
+export async function compareBranches(base: string, head: string): Promise<{ aheadBy: number; files: CompareFile[] }> {
+  const { repo } = githubEnv();
+  const data = await gh<{ ahead_by: number; files?: { filename: string; status: string }[] }>(
+    `/repos/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`
+  );
+  return {
+    aheadBy: data.ahead_by,
+    files: (data.files ?? []).map((f) => ({ status: COMPARE_STATUS_CODES[f.status] ?? "?", path: f.filename })),
+  };
+}
+
 export interface FileMeta {
   sha: string | null; // null if the file doesn't exist yet
   text: string | null; // decoded utf-8 content, null if not found
 }
 
-export async function getFileMeta(path: string): Promise<FileMeta> {
-  const { repo, branch } = githubEnv();
+export async function getFileMeta(path: string, branch?: string): Promise<FileMeta> {
+  const { repo, branch: liveBranch } = githubEnv();
+  const targetBranch = branch ?? liveBranch;
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   try {
     const data = await gh<{ sha: string; content?: string; encoding?: string }>(
-      `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(branch)}`
+      `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(targetBranch)}`
     );
     const text =
       data.content !== undefined
@@ -79,6 +159,7 @@ export interface CommitWrite {
 
 export interface CommitPlan {
   message: string;
+  branch?: string; // defaults to the live branch (githubEnv().branch)
   writes?: CommitWrite[];
   deletes?: string[]; // paths to remove from the tree
   // Point a path at an existing blob sha without re-uploading bytes — used
@@ -90,15 +171,15 @@ export interface CommitPlan {
 
 type TreeEntry = { path: string; mode: "100644"; type: "blob"; sha: string | null };
 
-// A single "Save card" in remote mode is an immediate real push (there's no
-// separate local-staging step to batch into, unlike the local dev flow), so
-// two saves landing close together is a real possibility, not paranoia.
-// Retry a bounded number of times on the ref having moved between our read
-// and our write, re-fetching the base each time.
+// Two saves landing close together on the same branch is a real possibility
+// (this is what the staging branch absorbs, but even staging alone can race
+// across two tabs/devices), so retry a bounded number of times on the ref
+// having moved between our read and our write, re-fetching the base each time.
 const MAX_ATTEMPTS = 3;
 
 export async function commitFiles(plan: CommitPlan): Promise<{ commitSha: string }> {
-  const { repo, branch } = githubEnv();
+  const { repo, branch: liveBranch } = githubEnv();
+  const branch = plan.branch ?? liveBranch;
   let lastErr: unknown;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -160,8 +241,8 @@ export async function commitFiles(plan: CommitPlan): Promise<{ commitSha: string
 }
 
 // Remote-mode sibling of git.server.ts's fs-based bumpPatchVersion — pure
-// string transform so the route handler can fold it into the same commit as
-// the photo and card-configs.json instead of a separate write.
+// string transform so the route handler can fold it into a commit alongside
+// other file changes instead of a separate write.
 export function bumpPackageVersion(packageJsonText: string): { text: string; version: string } {
   const pkg = JSON.parse(packageJsonText);
   const parts = String(pkg.version).split(".").map(Number);
