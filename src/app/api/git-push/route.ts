@@ -8,6 +8,8 @@ import {
   fastForwardBranch,
   getFileMeta,
   githubEnv,
+  GitHubApiError,
+  mergeBranch,
   stagingBranch,
 } from "@/lib/github-content.server";
 import { isRemoteBackend, isRemoteModeEnabled } from "@/lib/remote-mode.server";
@@ -116,12 +118,39 @@ async function publishRemote() {
   try {
     await fastForwardBranch(liveBranch, publishSha);
   } catch (err) {
-    return NextResponse.json(
-      {
-        error: `Queued changes are safe on "${branch}", but publishing to "${liveBranch}" failed: ${(err as Error).message}`,
-      },
-      { status: 502 }
-    );
+    if (!(err instanceof GitHubApiError) || err.status !== 422) {
+      return NextResponse.json(
+        {
+          error: `Queued changes are safe on "${branch}", but publishing to "${liveBranch}" failed: ${(err as Error).message}`,
+        },
+        { status: 502 }
+      );
+    }
+
+    // "main" moved independently since staging last synced with it (e.g. a
+    // direct push, or another publish) — routine, not corruption. Merge it
+    // into staging and retry once, instead of requiring manual
+    // reconciliation for what's usually an automatically-resolvable gap.
+    try {
+      const merge = await mergeBranch(branch, liveBranch, `Merge ${liveBranch} into ${branch} before publish`);
+      if (merge.conflict) {
+        return NextResponse.json(
+          {
+            error: `Queued changes are safe on "${branch}", but they conflict with newer changes on "${liveBranch}" — this needs manual review.`,
+          },
+          { status: 409 }
+        );
+      }
+      publishSha = merge.sha ?? publishSha;
+      await fastForwardBranch(liveBranch, publishSha);
+    } catch (retryErr) {
+      return NextResponse.json(
+        {
+          error: `Queued changes are safe on "${branch}", but publishing to "${liveBranch}" failed even after syncing: ${(retryErr as Error).message}`,
+        },
+        { status: 502 }
+      );
+    }
   }
 
   return NextResponse.json({

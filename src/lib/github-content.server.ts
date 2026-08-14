@@ -99,6 +99,40 @@ export async function fastForwardBranch(branch: string, toSha: string): Promise<
   });
 }
 
+export interface MergeResult {
+  merged: boolean; // false if base already contained head (nothing to do)
+  conflict: boolean; // true if GitHub couldn't auto-merge
+  sha: string | null; // the new merge commit, if one was created
+}
+
+// Wraps GitHub's "Merge a branch" endpoint directly rather than through the
+// shared gh() helper: unlike every other call in this file, a successful
+// response here can be 204 (base already up to date, empty body) as well as
+// 201 (merge commit created, JSON body) — and 409 (real conflict) is an
+// expected outcome to report, not something to throw on.
+export async function mergeBranch(base: string, head: string, message: string): Promise<MergeResult> {
+  const { repo, token } = githubEnv();
+  const res = await fetch(`${GITHUB_API}/repos/${repo}/merges`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ base, head, commit_message: message }),
+    cache: "no-store",
+  });
+  if (res.status === 204) return { merged: false, conflict: false, sha: null };
+  if (res.status === 409) return { merged: false, conflict: true, sha: null };
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new GitHubApiError(res.status, `GitHub API POST /repos/${repo}/merges -> ${res.status}: ${body}`);
+  }
+  const data = (await res.json()) as { sha: string };
+  return { merged: true, conflict: false, sha: data.sha };
+}
+
 export interface CompareFile {
   status: string; // short code: "A" | "M" | "D" | "R" | other
   path: string;
@@ -131,6 +165,16 @@ export async function compareBranches(base: string, head: string): Promise<{ ahe
 export interface FileMeta {
   sha: string | null; // null if the file doesn't exist yet
   text: string | null; // decoded utf-8 content, null if not found
+}
+
+// Fetches a blob's raw bytes by sha via the Git Data API, which (unlike the
+// Contents API's getFileMeta above) always returns content regardless of
+// file size, up to 100MB — needed to actually serve a photo's bytes back to
+// the browser, since the Contents API omits `content` past 1MB.
+export async function getBlob(sha: string): Promise<Buffer> {
+  const { repo } = githubEnv();
+  const data = await gh<{ content: string; encoding?: string }>(`/repos/${repo}/git/blobs/${sha}`);
+  return Buffer.from(data.content, (data.encoding as BufferEncoding) ?? "base64");
 }
 
 export async function getFileMeta(path: string, branch?: string): Promise<FileMeta> {

@@ -24,6 +24,7 @@ import type { Entry } from "./FolderBrowser";
 import type { UploadImage } from "./PhotoPicker";
 import { DESIGNS, POOLS } from "@/lib/designs";
 import { firstEmptySlot, configKey } from "@/lib/card-key";
+import { photoSrc } from "@/lib/photo-src";
 import type { Attribute, Card as CardT, CardConfig, CardOrientation, Crop, HoloPattern, Rarity } from "@/lib/types";
 
 export type EditorTarget =
@@ -70,6 +71,7 @@ interface CardEditorProps {
   configs: Record<string, CardConfig>;
   onSaved: () => void;
   onClose: () => void;
+  remote?: boolean;
 }
 
 function slotFor(designId: string, configs: Record<string, CardConfig>): number {
@@ -77,7 +79,7 @@ function slotFor(designId: string, configs: Record<string, CardConfig>): number 
   return firstEmptySlot(designId, design.packs * 8, configs) ?? 1;
 }
 
-export default function CardEditor({ target, configs, onSaved, onClose }: CardEditorProps) {
+export default function CardEditor({ target, configs, onSaved, onClose, remote = false }: CardEditorProps) {
   const editingConfig = target.kind === "edit" ? configs[target.key] : null;
 
   const [designId, setDesignId] = useState(() => editingConfig?.designId ?? DESIGNS[0].id);
@@ -107,7 +109,7 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
 
   const src =
     target.kind === "edit" && editingConfig
-      ? `/photos/${editingConfig.designId}/${editingConfig.fileName}`
+      ? photoSrc(editingConfig.designId, editingConfig.fileName, remote)
       : target.kind === "new"
         ? `/api/local-image?path=${encodeURIComponent(target.image.path)}`
         : target.kind === "upload"
