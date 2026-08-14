@@ -21,11 +21,15 @@ import CardLightbox from "@/components/CardLightbox";
 import CropEditor from "./CropEditor";
 import LightingDebugPanel from "./LightingDebugPanel";
 import type { Entry } from "./FolderBrowser";
+import type { UploadImage } from "./PhotoPicker";
 import { DESIGNS, POOLS } from "@/lib/designs";
 import { firstEmptySlot, configKey } from "@/lib/card-key";
 import type { Attribute, Card as CardT, CardConfig, CardOrientation, Crop, HoloPattern, Rarity } from "@/lib/types";
 
-export type EditorTarget = { kind: "new"; image: Entry } | { kind: "edit"; key: string };
+export type EditorTarget =
+  | { kind: "new"; image: Entry }
+  | { kind: "upload"; image: UploadImage }
+  | { kind: "edit"; key: string };
 
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "holo", "secret"];
 const HOLO_PATTERNS: { value: HoloPattern; label: string }[] = [
@@ -106,12 +110,16 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
       ? `/photos/${editingConfig.designId}/${editingConfig.fileName}`
       : target.kind === "new"
         ? `/api/local-image?path=${encodeURIComponent(target.image.path)}`
-        : "";
+        : target.kind === "upload"
+          ? target.image.previewUrl
+          : "";
 
   const heading =
     target.kind === "edit"
       ? `Editing ${editingConfig?.title || target.key}`
-      : target.image.name;
+      : target.kind === "upload"
+        ? target.image.file.name
+        : target.image.name;
 
   const handleDesignChange = (id: string) => {
     setDesignId(id);
@@ -179,25 +187,49 @@ export default function CardEditor({ target, configs, onSaved, onClose }: CardEd
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/card-config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          existingKey: target.kind === "edit" ? target.key : undefined,
-          sourcePath: target.kind === "new" ? target.image.path : undefined,
-          designId,
-          local,
-          crop,
-          rarity,
-          holo,
-          holoPattern,
-          orientation,
-          attributes: attributes.filter((a) => a.label.trim() || a.value.trim()),
-          title: title || undefined,
-          date: date || undefined,
-          medium: medium || undefined,
-        }),
-      });
+      const existingKey = target.kind === "edit" ? target.key : undefined;
+      const cleanAttributes = attributes.filter((a) => a.label.trim() || a.value.trim());
+
+      let res: Response;
+      if (target.kind === "upload") {
+        // Phone/upload flow: the photo's bytes travel as multipart form data
+        // rather than a server-readable sourcePath.
+        const form = new FormData();
+        form.set("file", target.image.file);
+        if (existingKey) form.set("existingKey", existingKey);
+        form.set("designId", designId);
+        form.set("local", String(local));
+        form.set("crop", JSON.stringify(crop));
+        form.set("rarity", rarity);
+        form.set("holo", String(holo));
+        form.set("holoPattern", holoPattern);
+        form.set("orientation", orientation);
+        form.set("attributes", JSON.stringify(cleanAttributes));
+        if (title) form.set("title", title);
+        if (date) form.set("date", date);
+        if (medium) form.set("medium", medium);
+        res = await fetch("/api/card-config", { method: "POST", body: form });
+      } else {
+        res = await fetch("/api/card-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            existingKey,
+            sourcePath: target.kind === "new" ? target.image.path : undefined,
+            designId,
+            local,
+            crop,
+            rarity,
+            holo,
+            holoPattern,
+            orientation,
+            attributes: cleanAttributes,
+            title: title || undefined,
+            date: date || undefined,
+            medium: medium || undefined,
+          }),
+        });
+      }
       const data = await res.json();
       if (!res.ok) {
         setMessage(data.error ?? "Save failed");

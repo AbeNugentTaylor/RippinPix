@@ -59,18 +59,43 @@ it's not part of the deployed site (both the page and its API routes 404 wheneve
 npm run dev
 ```
 
-Open [http://localhost:3000/configurator](http://localhost:3000/configurator), browse to a
-folder on your machine (it starts at your Desktop), pick a photo, drag/zoom it into the 63:88
-card frame, choose a rarity (and holo foil), add attributes, and hit **Save card**. Saving:
+Open [http://localhost:3000/configurator](http://localhost:3000/configurator). There are two ways
+to pick a photo:
 
-1. Copies the original photo — full resolution, untouched — into `public/photos/<designId>/<NN>.<ext>`.
+- **Choose photos…** (the "Photos from this device" panel) opens the browser's native photo
+  picker — on a phone this surfaces your camera roll, so it's the way in for a Lightroom-mobile
+  workflow: export/share your picks from Lightroom to the camera roll, then pick them here. Works
+  the same from a laptop browser.
+- The **folder browser** below it walks your machine's filesystem (starts at Desktop) — the
+  original desktop-only flow.
+
+Either way, drag/zoom the photo into the 63:88 card frame, choose a rarity (and holo foil), add
+attributes, and hit **Save card**. Saving:
+
+1. Copies the photo — full resolution, untouched — into `public/photos/<designId>/<NN>.<ext>`.
 2. Writes an entry into [`src/data/card-configs.json`](src/data/card-configs.json) with the crop,
    rarity, holo flag, attributes, and any title/date/medium overrides.
 
 The pack-opening site (`/`) reads both automatically: a slot with a saved config renders as a
 full-art holo card with your crop/rarity/attributes; every other slot keeps rendering the
-original generated-placeholder plate. Commit both the new photo and the updated
-`card-configs.json` to hand the cards off.
+original generated-placeholder plate.
+
+Once you've saved the cards you want, the **Push to GitHub** panel at the bottom shows what's
+changed under `public/photos/` and `card-configs.json`; hit **Push to GitHub**, confirm, and it
+bumps the version, commits, and pushes the current branch for you — no separate git step. (This
+runs `git` on whatever machine is running `npm run dev`, using its existing credentials, so it's
+still meant for your own machine/network, not a public deployment.)
+
+### Reaching the configurator from your phone
+
+`next dev` only listens on `localhost` by default. To open `/configurator` from a phone on the
+same Wi-Fi, start it bound to your machine's LAN address instead:
+
+```bash
+npm run dev -- -H 0.0.0.0
+```
+
+then visit `http://<your-computer's-LAN-IP>:3000/configurator` from the phone.
 
 ## Deploying
 

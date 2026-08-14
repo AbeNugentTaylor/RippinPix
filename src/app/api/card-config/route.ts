@@ -38,10 +38,47 @@ export async function GET() {
   return NextResponse.json(getCardConfigs());
 }
 
+// The phone-upload flow (no local filesystem to browse) posts multipart form
+// data with the photo's bytes attached instead of a JSON body pointing at a
+// sourcePath; normalize both shapes to the same SaveBody + optional file.
+async function parseBody(request: NextRequest): Promise<{ body: SaveBody; uploadFile: File | null }> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.includes("multipart/form-data")) {
+    return { body: (await request.json()) as SaveBody, uploadFile: null };
+  }
+
+  const form = await request.formData();
+  const str = (key: string): string | undefined => {
+    const v = form.get(key);
+    return typeof v === "string" && v !== "" ? v : undefined;
+  };
+  const json = <T,>(key: string): T | undefined => {
+    const v = str(key);
+    return v ? (JSON.parse(v) as T) : undefined;
+  };
+  const file = form.get("file");
+
+  const body: SaveBody = {
+    existingKey: str("existingKey"),
+    designId: str("designId") ?? "",
+    local: str("local") ? Number(str("local")) : undefined,
+    crop: json<Crop>("crop"),
+    rarity: str("rarity") as Rarity,
+    holo: str("holo") === undefined ? undefined : str("holo") === "true",
+    holoPattern: str("holoPattern") as HoloPattern | undefined,
+    orientation: str("orientation") as CardOrientation | undefined,
+    attributes: json<Attribute[]>("attributes"),
+    title: str("title"),
+    date: str("date"),
+    medium: str("medium"),
+  };
+  return { body, uploadFile: file instanceof File ? file : null };
+}
+
 export async function POST(request: NextRequest) {
   if (blocked()) return new NextResponse(null, { status: 404 });
 
-  const body = (await request.json()) as SaveBody;
+  const { body, uploadFile } = await parseBody(request);
 
   const design = DESIGNS.find((d) => d.id === body.designId);
   if (!design) return NextResponse.json({ error: "Unknown design" }, { status: 400 });
@@ -94,6 +131,21 @@ export async function POST(request: NextRequest) {
           // best-effort cleanup of the now-orphaned file; not fatal
         }
       }
+    }
+  } else if (uploadFile) {
+    const ext = path.extname(uploadFile.name).toLowerCase();
+    if (!IMAGE_EXT.has(ext)) {
+      return NextResponse.json(
+        { error: `Unsupported file type "${ext || uploadFile.name}" — export as JPEG, PNG, or WebP first.` },
+        { status: 400 }
+      );
+    }
+    fileName = `${String(local).padStart(2, "0")}${ext}`;
+    sourcePath = uploadFile.name;
+    try {
+      fs.writeFileSync(path.join(destDir, fileName), Buffer.from(await uploadFile.arrayBuffer()));
+    } catch (err) {
+      return NextResponse.json({ error: describeReadError(err, uploadFile.name) }, { status: 400 });
     }
   } else {
     if (!body.sourcePath || !fs.existsSync(body.sourcePath)) {
