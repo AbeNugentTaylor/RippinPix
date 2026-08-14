@@ -339,5 +339,25 @@
     "date": "2022",
     "medium": "Digital",
     "updatedAt": "2026-08-14T22:35:52.580Z"
+  },
+  "cars/1": {
+    "designId": "cars",
+    "local": 1,
+    "fileName": "01.jpg",
+    "sourcePath": "Revs20.jpg",
+    "crop": {
+      "x": 50,
+      "y": 50,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "orientation": "portrait",
+    "attributes": [],
+    "title": "Squidulator",
+    "date": "2023",
+    "medium": "Film - Unknown Stock",
+    "updatedAt": "2026-08-14T23:00:56.300Z"
   }
 }
