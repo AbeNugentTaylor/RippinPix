@@ -270,6 +270,15 @@
   font-size: 12px;
 }
 
+.cfg-load-error {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-accent-2-400);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+
 .cfg-empty {
   color: var(--color-neutral-500);
   font-size: 13px;

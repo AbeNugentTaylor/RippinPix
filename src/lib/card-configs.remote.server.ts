@@ -13,11 +13,21 @@ import { CARD_CONFIGS_REL_PATH } from "./card-configs.server";
 import type { CardConfig } from "./types";
 
 export async function getCardConfigsRemote(): Promise<Record<string, CardConfig>> {
-  const { text } = await getFileMeta(CARD_CONFIGS_REL_PATH);
+  const { sha, text } = await getFileMeta(CARD_CONFIGS_REL_PATH);
+  // card-configs.json always exists in this repo — a missing sha here means
+  // GITHUB_REPO/GITHUB_BRANCH point somewhere that doesn't have it (wrong
+  // repo, wrong branch, typo), not a legitimately-empty project. Throw
+  // instead of silently returning {}, so that ends up as a visible error
+  // instead of a confusing "no saved cards".
+  if (sha === null) {
+    const repo = process.env.GITHUB_REPO ?? "(unset)";
+    const branch = process.env.GITHUB_BRANCH || "main";
+    throw new Error(`${CARD_CONFIGS_REL_PATH} not found in ${repo}@${branch} — check GITHUB_REPO and GITHUB_BRANCH.`);
+  }
   if (!text) return {};
   try {
     return JSON.parse(text) as Record<string, CardConfig>;
-  } catch {
-    return {};
+  } catch (err) {
+    throw new Error(`${CARD_CONFIGS_REL_PATH} exists but isn't valid JSON: ${(err as Error).message}`);
   }
 }

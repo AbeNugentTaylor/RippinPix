@@ -23,15 +23,27 @@ export default function ConfiguratorApp({ remote = false }: ConfiguratorAppProps
   const [configs, setConfigs] = useState<Record<string, CardConfig>>({});
   const [uploads, setUploads] = useState<UploadImage[]>([]);
   const [compressing, setCompressing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Bumped on every config refresh so GitPushPanel knows to re-check git
   // status — otherwise a save/delete never re-fetches its "pending" count.
   const [changeTick, setChangeTick] = useState(0);
 
   const refresh = useCallback(() => {
     fetch("/api/card-config")
-      .then((res) => res.json())
-      .then(setConfigs)
-      .catch(() => {})
+      .then(async (res) => {
+        const body = await res.json();
+        // A failed remote-mode read used to silently render as "no saved
+        // cards" — surface the real error instead of swallowing it, since
+        // that's exactly the kind of thing a misconfigured GITHUB_REPO/
+        // GITHUB_BRANCH produces.
+        if (!res.ok) {
+          setLoadError(body?.error ?? "Could not load saved cards.");
+          return;
+        }
+        setLoadError(null);
+        setConfigs(body);
+      })
+      .catch(() => setLoadError("Could not reach the configurator server."))
       .finally(() => setChangeTick((t) => t + 1));
   }, []);
 
@@ -117,6 +129,7 @@ export default function ConfiguratorApp({ remote = false }: ConfiguratorAppProps
             </>
           )}
         </p>
+        {loadError && <p className="cfg-error cfg-load-error">Couldn&rsquo;t load saved cards: {loadError}</p>}
       </header>
       <div className="cfg-layout">
         <div className="cfg-left-col">
