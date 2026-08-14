@@ -112,7 +112,8 @@ protected by HTTP Basic Auth (see [`src/proxy.ts`](src/proxy.ts)) — your brows
 password the first time.
 
 To turn it on, set these as **Netlify environment variables** (Site configuration → Environment
-variables), available to both the build and the functions:
+variables), scoped to "Same value in all deploy contexts" so there's exactly one value each,
+not a different one per context:
 
 | Variable | Purpose |
 | --- | --- |
@@ -120,15 +121,17 @@ variables), available to both the build and the functions:
 | `CONFIGURATOR_PASSWORD` | The Basic Auth password. If `CONFIGURATOR_REMOTE=1` and this is unset, the configurator fails closed (denies everything) rather than opening up. |
 | `GITHUB_TOKEN` | A fine-grained [Personal Access Token](https://github.com/settings/personal-access-tokens/new), scoped to **this repo only**, with **Contents: Read and write** permission — nothing else. |
 | `GITHUB_REPO` | `owner/repo`, e.g. `AbeNugentTaylor/RippinPix`. |
-| `GITHUB_BRANCH` | Branch to commit to. Defaults to `main` if unset — make sure this is the branch Netlify auto-deploys from. |
+| `GITHUB_BRANCH` | Branch to commit to, case-sensitive (`main`, not `MAIN`). Defaults to `main` if unset — make sure this is the branch Netlify auto-deploys from. |
+
+**After adding, editing, or removing any of these, trigger a fresh deploy** — Deploys tab →
+Trigger deploy → "Clear cache and deploy site". `@netlify/plugin-nextjs` bakes these into the
+built function bundle, so a dashboard-only change (with no new deploy) does not take effect on
+its own, even though Netlify's UI doesn't make that obvious.
 
 Notes:
 
 - New cards still need Netlify's next auto-rebuild to appear on the live site — same as a local
   `git push` today, just triggered remotely.
-- Because `CONFIGURATOR_REMOTE` is read at build time too, flipping it off in the dashboard
-  without a redeploy won't hide the page's URL — but Basic Auth (checked per-request, not baked
-  into the build) is what's actually protecting it either way.
 - Uploaded photos are downscaled/re-encoded client-side before sending, since Netlify's function
   request size limit is well under what an unedited phone photo produces. Full-resolution
   originals are preserved by the local `npm run dev` flow above.
