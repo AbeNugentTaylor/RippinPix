@@ -319,5 +319,25 @@
     "date": "2025",
     "medium": "Film - Unknown Stock",
     "updatedAt": "2026-08-08T13:36:05.545Z"
+  },
+  "animals/1": {
+    "designId": "animals",
+    "local": 1,
+    "fileName": "01.jpg",
+    "sourcePath": "DSC_0309.jpg",
+    "crop": {
+      "x": 50,
+      "y": 50,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "orientation": "portrait",
+    "attributes": [],
+    "title": "Busking",
+    "date": "2022",
+    "medium": "Digital",
+    "updatedAt": "2026-08-14T22:35:52.580Z"
   }
 }
