@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import CardLightbox from "@/components/CardLightbox";
 import { configToPreviewCard } from "@/lib/preview-card";
+import { photoSrc } from "@/lib/photo-src";
 import type { CardConfig } from "@/lib/types";
 
 interface ImportedListProps {
@@ -11,12 +12,14 @@ interface ImportedListProps {
   editingKey?: string | null;
   onEdit: (key: string) => void;
   onDeleted: () => void;
+  remote?: boolean;
 }
 
-export default function ImportedList({ configs, editingKey, onEdit, onDeleted }: ImportedListProps) {
+export default function ImportedList({ configs, editingKey, onEdit, onDeleted, remote = false }: ImportedListProps) {
   const entries = Object.entries(configs).sort(([a], [b]) => a.localeCompare(b));
   const [previewKey, setPreviewKey] = useState<string | null>(null);
-  const previewCard = previewKey && configs[previewKey] ? configToPreviewCard(previewKey, configs[previewKey]) : null;
+  const previewCard =
+    previewKey && configs[previewKey] ? configToPreviewCard(previewKey, configs[previewKey], remote) : null;
 
   const remove = async (key: string) => {
     await fetch(`/api/card-config?key=${encodeURIComponent(key)}`, { method: "DELETE" });
@@ -44,7 +47,7 @@ export default function ImportedList({ configs, editingKey, onEdit, onDeleted }:
           >
             <div className="cfg-imported-thumb">
               <Image
-                src={`/photos/${config.designId}/${config.fileName}`}
+                src={photoSrc(config.designId, config.fileName, remote)}
                 alt={config.title ?? key}
                 fill
                 unoptimized

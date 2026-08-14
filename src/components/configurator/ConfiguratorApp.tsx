@@ -156,6 +156,7 @@ export default function ConfiguratorApp({ remote = false }: ConfiguratorAppProps
             configs={configs}
             onSaved={target.kind === "upload" ? () => handleUploadSaved(target.image.id) : refresh}
             onClose={() => setTarget(null)}
+            remote={remote}
           />
         ) : (
           <div className="cfg-panel cfg-panel--placeholder">
@@ -169,6 +170,7 @@ export default function ConfiguratorApp({ remote = false }: ConfiguratorAppProps
           editingKey={target?.kind === "edit" ? target.key : null}
           onEdit={(key) => setTarget({ kind: "edit", key })}
           onDeleted={refresh}
+          remote={remote}
         />
       </div>
       <GitPushPanel refreshSignal={changeTick} remote={remote} />
