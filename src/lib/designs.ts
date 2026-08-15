@@ -1,96 +1,34 @@
+import designData from "@/data/designs.json";
 import type { Design, Pack, Plate, Slot } from "./types";
 
-// One entry per series. `packs` is the only knob for run size: 8 photos per
-// pack, so packs: 3 -> 24 photographs in that series.
-export const DESIGNS: Design[] = [
-  { id: "leaks", name: "Cheeky light leaks", packs: 2, stock: "#f9a17a", foil: "#8a2f14", ink: "#7a2a12",
-    art: ["Cheeky", "light", "leaks"], sub: "the roll went wrong, nicely",
-    subjects: ["Window flare", "Sprocket burn", "Red bloom", "End of the roll", "Double exposure", "Halation", "Sunstruck frame", "Fogged corner", "Orange wash", "Ghost frame"],
-    conds: ["by accident", "on purpose", "twice over", "at golden hour", "wide open", "in the camera bag", "on the last shot", "again"] },
-  { id: "objects", name: "Inanimate objects", packs: 3, stock: "#e8e3d3", foil: "#201e1d", ink: "#3a3634",
-    art: ["Objects", "that sit", "still"], sub: "black & white, no opinions",
-    subjects: ["Kettle", "Folding chair", "Doorknob", "Stack of plates", "Fire hydrant", "Telephone", "Bicycle bell", "Wine glass", "Toolbox", "Alarm clock"],
-    conds: ["on the counter", "in flat light", "against a wall", "half in shadow", "very still", "on the floor", "by the window", "at close range"] },
-  { id: "landbw", name: "Landscapes", packs: 3, stock: "#c8d6dd", foil: "#0a303e", ink: "#123845",
-    art: ["Land", "in black", "& white"], sub: "grey skies, on purpose",
-    subjects: ["The long field", "Quarry road", "Fog bank", "Breakwater", "Ridge line", "Dry riverbed", "Salt flat", "Fence and hedge", "Low tide", "Snow field"],
-    conds: ["at first light", "in fog", "before the storm", "at dusk", "under snow", "half lit", "after the rain", "at noon"] },
-  { id: "flowers", name: "Flowers", packs: 2, stock: "#f7a7c6", foil: "#790e3d", ink: "#9c1450",
-    art: ["Nothing", "but", "flowers"], sub: "cut, potted, wild",
-    subjects: ["Peony", "Cut tulips", "Dandelion", "Hydrangea", "Poppy field", "Single rose", "Wildflower verge", "Sunflower", "Dried bouquet", "Window box"],
-    conds: ["day six", "in the rain", "past their best", "backlit", "in a jam jar", "close up", "at the market", "wilting"] },
-  { id: "wife", name: "Wife", packs: 2, stock: "#f6d9e3", foil: "#8e2a52", ink: "#8e2a52",
-    art: ["My", "favourite", "subject"], sub: "she puts up with a lot",
-    subjects: ["Kitchen light", "Reading", "Laughing at me", "In the passenger seat", "Coat and scarf", "Half asleep", "On the balcony", "Mid-sentence", "Holding coffee", "Walking ahead"],
-    conds: ["on a Sunday", "unposed", "in the doorway", "looking away", "in soft light", "at the table", "on the way home", "before dinner"] },
-  { id: "animals", name: "Animals", packs: 2, stock: "#d8c9a8", foil: "#4a3517", ink: "#5b431f",
-    art: ["Animals", "who", "moved"], sub: "none of them held still",
-    subjects: ["Neighbour's cat", "Heron", "Farm dog", "Pigeons", "Fox at dusk", "Cows, field edge", "Squirrel", "Gulls", "Horse and fence", "Duck pond"],
-    conds: ["mid-blink", "running off", "watching me", "in the rain", "at a distance", "too close", "at first light", "unimpressed"] },
-  { id: "nature", name: "Plants & trees", packs: 2, stock: "#a9e3c3", foil: "#154a30", ink: "#175136",
-    art: ["Just", "like", "nature"], sub: "plants and trees and stuff",
-    subjects: ["Oak, alone", "Ferns", "Hedge row", "Moss on stone", "Pine stand", "Ivy wall", "Bare branches", "Reeds", "Fallen trunk", "Canopy"],
-    conds: ["in spring", "after rain", "from below", "in low sun", "half in shade", "in the wind", "in November", "up close"] },
-  { id: "austin", name: "Austin TX", packs: 2, limited: true, stock: "#f6e05a", foil: "#8a6a00", ink: "#6f5500",
-    art: ["Austin", "Texas", "run"], sub: "limited run",
-    subjects: ["Congress bridge", "Neon on 6th", "Taco truck", "South 1st", "Barton Springs", "Motel sign", "Zilker", "Hot afternoon", "Porch fan", "Colorado River"],
-    conds: ["in August heat", "after midnight", "in traffic", "on foot", "from the car", "at closing time", "midday", "with the AC off"] },
-  { id: "weihn", name: "Weihnachten", packs: 1, limited: true, stock: "#d7524b", foil: "#5c1210", ink: "#7a1a17",
-    art: ["Weih", "nachten"], sub: "one pack only",
-    subjects: ["Market stall", "Glühwein", "Lit window", "Snow on the square", "Tree lot", "Advent candle", "Cold hands", "Choir", "Sausage stand", "Frost"],
-    conds: ["after dark", "in the crowd", "on the way home", "in the cold", "with mittens on", "at four o'clock", "under lights", "at the door"] },
-  { id: "boys", name: "The boys", packs: 2, stock: "#9fd8ea", foil: "#004961", ink: "#005a74",
-    art: ["The", "boys"], sub: "they know what they did",
-    subjects: ["Back of the van", "Round the table", "Someone's kitchen", "Last orders", "On the walk", "Camp chairs", "Sunday morning", "Group shot", "Nobody ready", "Halfway home"],
-    conds: ["out of focus", "mid-argument", "after the pub", "at the campsite", "with the flash on", "too late at night", "in the car park", "unposed"] },
-  { id: "mke", name: "MKE", packs: 2, stock: "#b8c6e8", foil: "#1d2b57", ink: "#26346a",
-    art: ["Mil", "waukee"], sub: "cold lake, good bars",
-    subjects: ["Lake front", "Brady Street", "Third Ward", "Hoan Bridge", "Corner tavern", "Old brewery", "Bus stop", "Frozen shore", "Grain elevator", "Alley"],
-    conds: ["in February", "in the wind", "at closing", "under snow", "on a grey day", "from the bridge", "at sunrise", "in the rain"] },
-  { id: "cars", name: "Cars are cool?", packs: 1, limited: true, stock: "#c9b8e8", foil: "#3a2360", ink: "#432a70",
-    art: ["Cars", "are", "cool?"], sub: "one pack, no regrets",
-    subjects: ["Wagon in a driveway", "Chrome bumper", "Tail light", "Parked crooked", "Wheel arch", "Windscreen rain", "Car park, level 3", "Under a cover", "Sun on the hood", "Headlight"],
-    conds: ["at night", "in flat light", "close up", "from the kerb", "half washed", "in the rain", "with the door open", "at dusk"] },
-  { id: "josie", name: "Just Josie", packs: 1, limited: true, stock: "#f9c7d8", foil: "#a01e5a", ink: "#a01e5a",
-    art: ["Just", "Josie"], sub: "one pack, all her",
-    subjects: ["On the rug", "Nose in the frame", "Tail blur", "Sunny patch", "Chin on knee", "Ears up", "Asleep", "Mid-zoom", "At the door", "Looking guilty"],
-    conds: ["at eye level", "in the morning", "in soft light", "too close", "mid-yawn", "on the sofa", "outside", "waiting"] },
-  { id: "hk", name: "Hong Kong", packs: 1, limited: true, stock: "#9be3d4", foil: "#0c4a44", ink: "#0f5a52",
-    art: ["Hong", "Kong"], sub: "one pack",
-    subjects: ["Neon lane", "Wet market", "Ferry deck", "Tower block", "Escalator", "Tram window", "Noodle shop", "Harbour night", "Fruit stall", "Rooftop"],
-    conds: ["at night", "in the rain", "in the crowd", "from the tram", "at street level", "before dawn", "in the heat", "through glass"] },
-  { id: "sh", name: "Shanghai", packs: 1, limited: true, stock: "#f2b0a0", foil: "#6d2118", ink: "#7d281e",
-    art: ["Shang", "hai"], sub: "one pack",
-    subjects: ["The Bund", "Plane trees", "Lane house", "Metro platform", "Neon sign", "Bike lane", "Tea house", "Tower view", "Street food", "Old wall"],
-    conds: ["in haze", "at blue hour", "in the morning", "from above", "at speed", "in winter", "in the crowd", "at dusk"] },
-  { id: "vienna", name: "Vienna", packs: 2, limited: true, stock: "#e6d7f0", foil: "#432a70", ink: "#4b2f7d",
-    art: ["Wien"], sub: "cake, trams, statues",
-    subjects: ["Ringstrasse", "Café window", "Tram 1", "Stephansdom", "Naschmarkt", "Palace garden", "Stairwell", "Museum bench", "Kiosk", "Rooftops"],
-    conds: ["in the rain", "in low sun", "on a Sunday", "in winter", "at closing", "from below", "in the fog", "at first light"] },
-  { id: "euro", name: "European dreams", packs: 2, stock: "#b9e36c", foil: "#2c4a0d", ink: "#365a12",
-    art: ["European", "dreams"], sub: "Vienna, Paris, Spain",
-    subjects: ["Balcony shutters", "Paris rooftop", "Spanish courtyard", "Night train", "Café table", "Cathedral steps", "Coastal road", "Market square", "Narrow street", "Sea wall"],
-    conds: ["at siesta", "in July", "at blue hour", "on the way out", "in the heat", "before the crowd", "on film", "at the end of the day"] },
-  { id: "portr", name: "Portraits", packs: 1, locked: true, stock: "#cfcac2", foil: "#201e1d", ink: "#3a3634",
-    art: ["Port", "raits"], sub: "password protected",
-    subjects: ["The sitter", "Hands of a printer", "Stranger, platform 4", "Night shift nurse", "Two sisters", "A boxer", "The understudy", "Man with a radio", "Girl on the seawall", "My landlord"],
-    conds: ["holding still", "looking away", "between rounds", "off shift", "with the light behind", "mid-sentence", "after closing", "in her kitchen"] },
-];
+// One entry per series, editable via the configurator (which is why the data
+// lives in src/data/designs.json rather than here). `packs` is the only knob
+// for run size: 8 photos per pack, so packs: 3 -> 24 photographs in that
+// series. The live site reads this build-time snapshot; the configurator
+// fetches the current file through /api/designs instead, so freshly
+// added/edited categories show up there before a publish/rebuild.
+export const DESIGNS: Design[] = designData as Design[];
 
 export const PER_PACK = 8;
-export const TOTAL_PACKS = DESIGNS.reduce((n, d) => n + d.packs, 0);
 export const COL_GAP = 4.3;
 export const ROW_GAP = 1.5;
 const MEDIA = ["Gelatin silver print", "Archival pigment print", "Chromogenic print", "Platinum palladium"];
 
+// Placeholder vocabulary for categories created in the configurator, which
+// have no hand-written subjects/conds of their own yet.
+export const DEFAULT_SUBJECTS = ["Untitled frame", "Test roll", "First pick", "Second look", "Contact sheet", "Outtake", "Keeper", "Stray frame", "Last light", "Spare shot"];
+export const DEFAULT_CONDS = ["on film", "in passing", "up close", "in soft light", "at dusk", "unplanned", "mid-roll", "at first light"];
+
 // every series gets packs * 8 distinct plates, built from its own subjects x conditions
-export const POOLS: Record<string, Plate[]> = (() => {
+export function poolsFor(designs: Design[]): Record<string, Plate[]> {
   const out: Record<string, Plate[]> = {};
-  DESIGNS.forEach((d, di) => {
+  designs.forEach((d, di) => {
+    const subjects = d.subjects.length ? d.subjects : DEFAULT_SUBJECTS;
+    const conds = d.conds.length ? d.conds : DEFAULT_CONDS;
     const list: Plate[] = [];
     for (let k = 0; k < d.packs * PER_PACK; k++) {
       list.push({
-        title: `${d.subjects[k % d.subjects.length]}, ${d.conds[(k * 3 + di) % d.conds.length]}`,
+        title: `${subjects[k % subjects.length]}, ${conds[(k * 3 + di) % conds.length]}`,
         date: String(2019 + ((k * 5 + di) % 7)),
         medium: MEDIA[(k + di) % MEDIA.length],
       });
@@ -98,18 +36,24 @@ export const POOLS: Record<string, Plate[]> = (() => {
     out[d.id] = list;
   });
   return out;
-})();
+}
+
+export const POOLS: Record<string, Plate[]> = poolsFor(DESIGNS);
 
 // running plate number so every photograph has one number across the whole run
-export const PLATE_OFFSET: Record<string, number> = (() => {
+export function plateOffsetsFor(designs: Design[]): Record<string, number> {
   const out: Record<string, number> = {};
   let n = 0;
-  DESIGNS.forEach((d) => {
+  designs.forEach((d) => {
     out[d.id] = n;
     n += d.packs * PER_PACK;
   });
   return out;
-})();
+}
+
+export const PLATE_OFFSET: Record<string, number> = plateOffsetsFor(DESIGNS);
+
+export const TOTAL_PACKS = DESIGNS.reduce((n, d) => n + d.packs, 0);
 
 export function jit(a: number, b: number, span: number): number {
   const n = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;

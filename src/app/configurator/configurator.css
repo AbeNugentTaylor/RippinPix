@@ -35,16 +35,27 @@
   }
 }
 
+/* Mobile-first: one column, board above the photo sources. The wide layout
+   puts the photo sources in a sidebar beside the board/editor. */
 .cfg-layout {
   display: grid;
-  grid-template-columns: 260px minmax(560px, 1fr) 300px;
+  grid-template-columns: 1fr;
   gap: var(--space-4);
   align-items: start;
 }
 
-@media (max-width: 1200px) {
+.cfg-main {
+  min-width: 0;
+}
+
+@media (min-width: 1000px) {
   .cfg-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .cfg-left-col {
+    position: sticky;
+    top: var(--space-4);
   }
 }
 
@@ -361,16 +372,34 @@
   white-space: nowrap;
 }
 
+/* Mobile-first: crop, preview and form stack. Crop + preview sit side by side
+   as soon as there's room, then the form joins them on a wide screen. */
 .cfg-editor-body {
   display: grid;
-  grid-template-columns: auto auto 1fr;
-  gap: var(--space-6);
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
   align-items: start;
 }
 
-@media (max-width: 900px) {
+@media (min-width: 560px) {
   .cfg-editor-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto auto;
+    gap: var(--space-4) var(--space-6);
+  }
+
+  .cfg-editor-form {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1100px) {
+  .cfg-editor-body {
+    grid-template-columns: auto auto minmax(220px, 1fr);
+    gap: var(--space-6);
+  }
+
+  .cfg-editor-form {
+    grid-column: auto;
   }
 }
 
@@ -383,7 +412,7 @@
 
 .cfg-crop-frame {
   position: relative;
-  width: 220px;
+  width: min(220px, 42vw);
   aspect-ratio: 63 / 88;
   overflow: hidden;
   border-radius: 11px;
@@ -414,7 +443,7 @@
 
 .cfg-preview-frame {
   position: relative;
-  width: 220px;
+  width: min(220px, 42vw);
   aspect-ratio: 63 / 88;
   overflow: hidden;
   border-radius: 11px; /* matches the real card's corner ratio at this frame's width */
@@ -441,7 +470,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  min-width: 220px;
+  min-width: 0;
 }
 
 .cfg-field {
@@ -565,70 +594,349 @@
   width: 100%;
 }
 
-/* Imported list */
+/* Category board — tabs */
 
-.cfg-imported-list {
+.cfg-board {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  max-height: 80vh;
-  overflow-y: auto;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
-.cfg-imported-row {
-  display: grid;
-  grid-template-columns: 40px 1fr auto;
-  gap: 8px;
+/* Horizontal strip on phones (thumb-swipeable), wrapping rows once there's
+   room for them. */
+.cfg-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 700px) {
+  .cfg-tabs {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+
+.cfg-tab {
+  display: flex;
   align-items: center;
-  padding: 6px;
-  border-radius: var(--radius-sm);
-  background: var(--color-neutral-800);
-  border: 1px solid transparent;
+  gap: 6px;
+  flex: 0 0 auto;
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-neutral-700);
+  color: var(--color-neutral-300);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: var(--font-body);
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.cfg-imported-row:hover {
+.cfg-tab:hover {
   border-color: var(--color-neutral-600);
 }
 
-.cfg-imported-row--active {
+.cfg-tab--active {
   border-color: var(--color-accent-300);
-  background: var(--color-neutral-700);
-}
-
-.cfg-imported-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.cfg-imported-thumb {
-  position: relative;
-  width: 40px;
-  aspect-ratio: 63 / 88;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-}
-
-.cfg-imported-meta {
-  display: flex;
-  flex-direction: column;
-  font-size: 11px;
-  color: var(--color-neutral-400);
-  overflow: hidden;
-}
-
-.cfg-imported-meta strong {
+  background: var(--color-neutral-800);
   color: var(--color-neutral-100);
+}
+
+.cfg-tab-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-neutral-500);
+  background: var(--color-neutral-800);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.cfg-tab--active .cfg-tab-count {
+  background: var(--color-neutral-900);
+}
+
+.cfg-tab-count--done {
+  color: var(--color-green-chip);
+}
+
+.cfg-tab--add {
+  color: var(--color-accent-300);
+  border-style: dashed;
+}
+
+/* Category panel — pack summary */
+
+.cfg-cat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cfg-cat-summary {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.cfg-cat-name {
+  font-size: 18px;
+  margin-bottom: 2px;
+}
+
+.cfg-cat-sub {
+  font-size: 13px;
+  color: var(--color-neutral-400);
+  margin-bottom: 4px;
+}
+
+.cfg-cat-stats {
+  font-size: 12px;
+  color: var(--color-neutral-500);
+  margin-bottom: var(--space-3);
+}
+
+.cfg-cat-edit-btn {
+  background: var(--color-neutral-800);
+  border: 1px solid var(--color-neutral-600);
+  color: var(--color-neutral-100);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+.cfg-cat-edit-btn:hover {
+  border-color: var(--color-accent-300);
+}
+
+/* Pack front preview — the real canvas art PackScene textures the 3D pack
+   with, so label/banner collisions show up here exactly as they'd ship. */
+
+.cfg-pack-preview {
+  position: relative;
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  background: var(--color-neutral-800);
+}
+
+.cfg-pack-preview-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.cfg-pack-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-500);
   font-size: 12px;
 }
 
-.cfg-imported-row button {
-  background: none;
-  border: 1px solid var(--color-neutral-600);
+/* Slot grid */
+
+.cfg-pack-section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-neutral-500);
+  margin-bottom: var(--space-2);
+}
+
+.cfg-pack-section + .cfg-pack-section {
+  margin-top: var(--space-4);
+}
+
+.cfg-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--space-2);
+}
+
+.cfg-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-700);
+  background: var(--color-neutral-800);
   color: var(--color-neutral-400);
-  border-radius: var(--radius-sm);
-  padding: 4px 8px;
-  font-size: 11px;
+  font-family: var(--font-body);
+  text-align: left;
   cursor: pointer;
+  overflow: hidden;
+}
+
+.cfg-slot:hover,
+.cfg-slot:focus-visible {
+  border-color: var(--color-accent-300);
+}
+
+.cfg-slot-num {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 1;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--color-neutral-100);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.cfg-slot-photo {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 63 / 88;
+  overflow: hidden;
+  background: var(--color-neutral-900);
+}
+
+.cfg-slot-title,
+.cfg-slot-tag {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--color-neutral-200);
+}
+
+.cfg-slot-tag {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  padding-bottom: 6px;
+  font-size: 10px;
+  color: var(--color-neutral-500);
+}
+
+.cfg-slot-title {
+  padding-top: 5px;
+}
+
+/* Empty slots deliberately look like the placeholder they'd render as on the
+   live site, so an unfinished category reads as unfinished at a glance —
+   same geometry as a filled slot so grid rows stay even either way. */
+.cfg-slot--empty {
+  border-style: dashed;
+  border-color: var(--color-neutral-600);
+  background: var(--color-neutral-900);
+  text-align: center;
+}
+
+.cfg-slot-photo--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.cfg-slot--empty .cfg-slot-title,
+.cfg-slot--empty .cfg-slot-tag {
+  text-align: center;
+  color: var(--color-neutral-500);
+  font-style: italic;
+}
+
+.cfg-slot-plus {
+  font-size: 24px;
+  line-height: 1;
+  color: var(--color-neutral-600);
+}
+
+.cfg-slot--empty:hover .cfg-slot-plus,
+.cfg-slot--empty:focus-visible .cfg-slot-plus {
+  color: var(--color-accent-300);
+}
+
+/* Pack editor */
+
+.cfg-pack-editor-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (min-width: 700px) {
+  .cfg-pack-editor-body {
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+}
+
+.cfg-pack-editor-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 200px;
+}
+
+.cfg-art-input {
+  background: var(--color-neutral-800);
+  border: 1px solid var(--color-neutral-600);
+  color: var(--color-neutral-100);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: var(--font-body);
+  resize: vertical;
+}
+
+.cfg-color-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.cfg-color-row input[type="color"] {
+  width: 100%;
+  height: 36px;
+  padding: 2px;
+  background: var(--color-neutral-800);
+  border: 1px solid var(--color-neutral-600);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.cfg-delete-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--color-accent-2-400);
+  font-size: 13px;
+  font-family: var(--font-body);
+  text-decoration: underline;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.cfg-delete-btn {
+  background: var(--color-accent-2-400);
+}
+
+.cfg-delete-btn:hover {
+  background: var(--color-accent-2-400);
+  opacity: 0.85;
 }
