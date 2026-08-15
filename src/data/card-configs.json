@@ -380,5 +380,25 @@
     "date": "2023",
     "medium": "Film - Lomo Purple",
     "updatedAt": "2026-08-14T23:22:48.210Z"
+  },
+  "austin/3": {
+    "designId": "austin",
+    "local": 3,
+    "fileName": "03.jpg",
+    "sourcePath": "AustinBarCrawlPurple15.jpg",
+    "crop": {
+      "x": 50,
+      "y": 50,
+      "zoom": 1
+    },
+    "rarity": "common",
+    "holo": false,
+    "holoPattern": "none",
+    "orientation": "landscape",
+    "attributes": [],
+    "title": "Not Today",
+    "date": "2023",
+    "medium": "Film - Lomo Purple",
+    "updatedAt": "2026-08-15T13:49:47.869Z"
   }
 }
