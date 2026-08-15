@@ -716,54 +716,33 @@
   border-color: var(--color-accent-300);
 }
 
-/* Pack front preview (CSS stand-in for PackScene's canvas art) */
+/* Pack front preview — the real canvas art PackScene textures the 3D pack
+   with, so label/banner collisions show up here exactly as they'd ship. */
 
 .cfg-pack-preview {
-  display: flex;
-  flex-direction: column;
+  position: relative;
   width: 100%;
-  aspect-ratio: 700 / 1024;
   border-radius: 6px;
   overflow: hidden;
   box-shadow: var(--shadow-md);
-  container-type: inline-size;
+  background: var(--color-neutral-800);
 }
 
-.cfg-pack-preview-crimp {
-  flex: 0 0 7%;
-  opacity: 0.85;
+.cfg-pack-preview-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
-.cfg-pack-preview-border {
-  flex: 1;
+.cfg-pack-preview-loading {
+  position: absolute;
+  inset: 0;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 4cqw;
-  margin: 5cqw;
-  padding: 4cqw;
-  border: 1.5cqw solid rgba(27, 21, 18, 0.9);
-  outline: 0.6cqw solid rgba(27, 21, 18, 0.9);
-  outline-offset: 2cqw;
-  overflow: hidden;
-}
-
-.cfg-pack-preview-art {
-  display: flex;
-  flex-direction: column;
-  font-family: var(--font-marker);
-  color: #1b1512;
-  font-size: 15cqw;
-  line-height: 1.05;
-  text-transform: uppercase;
-  word-break: break-word;
-}
-
-.cfg-pack-preview-sub {
-  font-family: var(--font-marker);
-  color: #1b1512;
-  font-size: 6cqw;
-  line-height: 1.2;
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-500);
+  font-size: 12px;
 }
 
 /* Slot grid */

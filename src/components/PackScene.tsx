@@ -10,6 +10,7 @@ import {
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { permanentMarker, sourceSerif } from "@/lib/font";
+import { drawPackArt } from "@/lib/pack-art";
 import {
   DESIGNS,
   PACKS,
@@ -85,12 +86,6 @@ interface DesignMats {
   tex: THREE.CanvasTexture;
   foil: THREE.MeshStandardMaterial;
   art: THREE.MeshStandardMaterial;
-}
-
-// jitter used only for the hand-drawn cover-art wobble (distinct from the
-// symmetric jit() used for 3D slot placement / cardboard grime)
-function artJit(a: number, b: number, amp: number): number {
-  return ((Math.sin(a * 12.9898 + b * 78.233) * 43758.5453) % 1) * amp;
 }
 
 export interface PackSceneHandle {
@@ -377,191 +372,13 @@ const PackScene = forwardRef<PackSceneHandle, PackSceneProps>(function PackScene
     return c;
   }
 
+  // Cover art itself lives in lib/pack-art.ts so the configurator can render
+  // the identical canvas; this only wraps it as a three.js texture.
   async function makeArtTexture(design: Design) {
-    try {
-      await document.fonts.ready;
-    } catch {
-      /* noop */
-    }
-    const markerFamily = permanentMarker.style.fontFamily;
-    const serifFamily = sourceSerif.style.fontFamily;
-    const W = 700;
-    const H = 1024;
-    const c = document.createElement("canvas");
-    c.width = W;
-    c.height = H;
-    const g = c.getContext("2d")!;
-    const INK = "#1b1512";
-
-    g.fillStyle = design.stock || "#efe7d8";
-    g.fillRect(0, 0, W, H);
-
-    const wob = (x0v: number, y0: number, x1: number, y1: number, lw: number, seed: number) => {
-      g.strokeStyle = INK;
-      g.lineWidth = lw;
-      g.lineJoin = "round";
-      g.lineCap = "round";
-      g.beginPath();
-      const pts: [number, number][] = [];
-      const push = (x: number, y: number, i: number) =>
-        pts.push([x + artJit(i, seed, 5), y + artJit(i, seed + 3, 5)]);
-      let i = 0;
-      for (let x = x0v; x <= x1; x += 60) push(x, y0, i++);
-      for (let y = y0; y <= y1; y += 60) push(x1, y, i++);
-      for (let x = x1; x >= x0v; x -= 60) push(x, y1, i++);
-      for (let y = y1; y >= y0; y -= 60) push(x0v, y, i++);
-      pts.push(pts[0]);
-      pts.forEach((p, n) => (n ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
-      g.stroke();
-    };
-    wob(40, 40, W - 40, H - 40, 9, 1);
-    wob(58, 58, W - 58, H - 58, 3, 9);
-
-    g.save();
-    g.translate(96, 132);
-    g.rotate(-0.02);
-    g.fillStyle = INK;
-    g.font = `400 30px ${markerFamily}, ${serifFamily}, cursive`;
-    g.fillText(shopNameRef.current.toUpperCase(), 0, 0);
-    g.strokeStyle = INK;
-    g.lineWidth = 4;
-    g.lineCap = "round";
-    const mw = g.measureText(shopNameRef.current).width;
-    g.beginPath();
-    for (let x = -4; x <= mw + 4; x += 18) {
-      const yy = 14 + artJit(x, 4, 4);
-      if (x === -4) g.moveTo(x, yy);
-      else g.lineTo(x, yy);
-    }
-    g.stroke();
-    g.restore();
-
-    g.save();
-    g.translate(92, 360);
-    g.fillStyle = INK;
-    design.art.forEach((line, i) => {
-      g.save();
-      g.translate(artJit(i, 6, 9), i * 132);
-      g.rotate(artJit(i, 8, 0.045));
-      const words = line.toUpperCase();
-      let size = words.length > 6 ? 104 : 126;
-      g.font = `400 ${size}px ${markerFamily}, ${serifFamily}, cursive`;
-      const maxW = W - 200;
-      const wNow = g.measureText(words).width;
-      if (wNow > maxW) {
-        size = Math.floor(size * (maxW / wNow));
-        g.font = `400 ${size}px ${markerFamily}, ${serifFamily}, cursive`;
-      }
-      g.fillText(words, 0, 0);
-      g.lineWidth = 3;
-      g.strokeStyle = INK;
-      g.strokeText(words, 0, 0);
-      g.restore();
+    const c = await drawPackArt(design, {
+      shopName: shopNameRef.current,
+      designNumber: DESIGNS.findIndex((d) => d.id === design.id) + 1,
     });
-    g.restore();
-
-    g.save();
-    g.translate(96, 790);
-    g.rotate(-0.015);
-    g.fillStyle = INK;
-    g.font = `400 40px ${markerFamily}, ${serifFamily}, cursive`;
-    g.fillText(design.sub, 0, 0);
-    g.restore();
-
-    const star = (x: number, y: number, r: number, rot: number) => {
-      g.save();
-      g.translate(x, y);
-      g.rotate(rot);
-      g.strokeStyle = INK;
-      g.lineWidth = 5;
-      g.lineCap = "round";
-      for (let n = 0; n < 3; n++) {
-        const A = (n / 3) * Math.PI;
-        g.beginPath();
-        g.moveTo(-Math.cos(A) * r, -Math.sin(A) * r);
-        g.lineTo(Math.cos(A) * r, Math.sin(A) * r);
-        g.stroke();
-      }
-      g.restore();
-    };
-    star(W - 118, 214, 26, 0.3);
-    star(W - 176, 846, 15, -0.2);
-
-    const banner = design.locked ? "KEEP OUT" : design.limited ? "LIMITED RUN" : null;
-    if (banner) {
-      g.save();
-      g.translate(W - 214, 300);
-      g.rotate(-0.34);
-      g.fillStyle = INK;
-      g.font = `400 30px ${markerFamily}, ${serifFamily}, cursive`;
-      g.textAlign = "center";
-      g.textBaseline = "middle";
-      const bw = g.measureText(banner).width / 2 + 18;
-      g.strokeStyle = INK;
-      g.lineWidth = 4;
-      g.beginPath();
-      for (let n = 0; n <= 20; n++) {
-        const px2 = -bw + (n / 20) * bw * 2;
-        const py2 = (n % 2 ? -26 : -25) + artJit(n, 3, 3);
-        if (!n) g.moveTo(px2, py2);
-        else g.lineTo(px2, py2);
-      }
-      for (let n = 0; n <= 20; n++) {
-        const px2 = bw - (n / 20) * bw * 2;
-        g.lineTo(px2, 26 + artJit(n, 7, 3));
-      }
-      g.closePath();
-      g.stroke();
-      g.fillText(banner, 0, 2);
-      g.textAlign = "start";
-      g.textBaseline = "alphabetic";
-      g.restore();
-    }
-
-    g.save();
-    g.translate(96, H - 108);
-    g.rotate(-0.01);
-    g.fillStyle = INK;
-    g.font = `400 27px ${markerFamily}, ${serifFamily}, cursive`;
-    g.fillText("8 PHOTOS INSIDE", 0, 0);
-    g.restore();
-    g.save();
-    g.translate(W - 150, H - 120);
-    g.rotate(0.06);
-    g.strokeStyle = INK;
-    g.lineWidth = 4;
-    g.beginPath();
-    for (let n = 0; n <= 24; n++) {
-      const A = (n / 24) * Math.PI * 2;
-      const rr = 40 + artJit(n, 12, 4);
-      const x = Math.cos(A) * rr;
-      const y = Math.sin(A) * rr * 0.78;
-      if (!n) g.moveTo(x, y);
-      else g.lineTo(x, y);
-    }
-    g.closePath();
-    g.stroke();
-    g.fillStyle = INK;
-    g.font = `400 25px ${markerFamily}, ${serifFamily}, cursive`;
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.fillText("no." + (DESIGNS.findIndex((d) => d.id === design.id) + 1), 0, 2);
-    g.textAlign = "start";
-    g.textBaseline = "alphabetic";
-    g.restore();
-
-    for (let i = 0; i < 8; i++) {
-      const x = Math.abs(jit(i, 3, 1)) * W;
-      const y = Math.abs(jit(i, 7, 1)) * H;
-      const r = 120 + Math.abs(jit(i, 11, 1)) * 160;
-      const grad = g.createRadialGradient(x, y, 0, x, y, r);
-      grad.addColorStop(0, "rgba(255,255,255,.16)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
-      g.fillStyle = grad;
-      g.beginPath();
-      g.arc(x, y, r, 0, 6.3);
-      g.fill();
-    }
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     t.flipY = true;

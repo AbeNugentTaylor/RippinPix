@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PackPreview from "./PackPreview";
 import { PER_PACK } from "@/lib/designs";
+import { findLabelCollision } from "@/lib/pack-art";
 import type { Design } from "@/lib/types";
 
 interface PackEditorProps {
@@ -78,6 +79,29 @@ export default function PackEditor({ design, existingIds, cardCount, onSaved, on
     ...(design?.locked ? { locked: true } : {}),
   };
 
+  // The banner is drawn at a fixed spot regardless of the label, so a long
+  // line runs straight through it. Measure the same geometry the art uses and
+  // say which line clashes, rather than leaving it to be spotted by eye.
+  const [collision, setCollision] = useState<string | null>(null);
+  const collisionKey = JSON.stringify([draft.art, draft.limited ?? false, draft.locked ?? false]);
+  useEffect(() => {
+    let cancelled = false;
+    findLabelCollision(draft)
+      .then((hit) => {
+        if (cancelled) return;
+        setCollision(
+          hit ? `“${hit.text}” overlaps the ${hit.banner} badge — shorten it or split it across lines.` : null
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCollision(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collisionKey]);
+
   const save = async () => {
     setBusy(true);
     setError(null);
@@ -136,8 +160,14 @@ export default function PackEditor({ design, existingIds, cardCount, onSaved, on
 
       <div className="cfg-pack-editor-body">
         <div className="cfg-pack-editor-preview">
-          <span className="cfg-field-label">Pack preview</span>
-          <PackPreview design={draft} />
+          <span className="cfg-field-label">Pack front — exactly as it renders on the site</span>
+          {/* A new category lands at the end of the run, so its "no.N" stamp
+              is one past the current last. */}
+          <PackPreview
+            design={draft}
+            designNumber={design ? existingIds.indexOf(design.id) + 1 : existingIds.length + 1}
+          />
+          {collision && <p className="cfg-warning">{collision}</p>}
         </div>
 
         <div className="cfg-editor-form">
@@ -217,8 +247,8 @@ export default function PackEditor({ design, existingIds, cardCount, onSaved, on
             ))}
           {design && cardCount > 0 && (
             <p className="cfg-picker-hint">
-              This category has {cardCount} saved card{cardCount === 1 ? "" : "s"} — it can only be removed once
-              they&rsquo;re gone.
+              This category has {cardCount} saved card{cardCount === 1 ? "" : "s"}
+              {" — it can only be removed once they’re gone."}
             </p>
           )}
           {error && <p className="cfg-error">{error}</p>}

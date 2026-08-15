@@ -7,10 +7,10 @@ import CardLightbox from "./CardLightbox";
 import { DESIGNS, PACKS, PER_PACK, plateAt } from "@/lib/designs";
 import { configKey } from "@/lib/card-key";
 import { preloadImage } from "@/lib/preload-image";
+import { SHOP_NAME } from "@/lib/pack-art";
 import type { Card, CardConfig, Pack, Phase } from "@/lib/types";
 import pkg from "../../package.json";
 
-const SHOP_NAME = "RippinPix";
 const PACK_PRICE = "Free";
 const TOTAL_PLATES = PACKS.length * PER_PACK;
 

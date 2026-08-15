@@ -91,7 +91,7 @@ export default function CategoryBoard({
 
       <div className="cfg-panel cfg-cat-panel">
         <div className="cfg-cat-summary">
-          <PackPreview design={active} />
+          <PackPreview design={active} designNumber={designs.findIndex((d) => d.id === active.id) + 1} />
           <div className="cfg-cat-meta">
             <h3 className="cfg-cat-name">{active.name}</h3>
             {active.sub && <p className="cfg-cat-sub">{active.sub}</p>}
@@ -154,7 +154,9 @@ export default function CategoryBoard({
                     <span className="cfg-slot-title">{config.title || pool?.title}</span>
                     <span className="cfg-slot-tag">
                       {config.rarity}
-                      {config.holo ? " · holo" : ""}
+                      {/* "holo · holo" reads as a bug — the foil flag is only
+                          worth calling out when the tier doesn't already say it. */}
+                      {config.holo && config.rarity !== "holo" ? " · holo" : ""}
                     </span>
                   </button>
                 );
