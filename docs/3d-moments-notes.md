@@ -3,6 +3,15 @@
 Notes from the investigation behind `/moments` (capture a quick clip → lo-fi
 3D memory), including why this approach was chosen and where it can go next.
 
+> **v2 update — measured depth is now the primary source.** The first
+> version used AI depth only; testing against a clip with real sideways
+> motion showed the AI map can be flat-out wrong (it called the nearest
+> doorframe "far") while triangulation from the footage's own parallax got
+> the scene right (387 tracked points, 0.2px reprojection error, 2.7°
+> median triangulation angle). The shipped pipeline now measures depth from
+> the video first and uses AI only as comparison/fallback — see
+> "Measured depth pipeline" below.
+
 ## The test clip
 
 The reference capture was a 4.5s handheld iPhone clip (480×360, H.264, indoor
@@ -17,15 +26,54 @@ decision below.
 | Photogrammetry / SfM (COLMAP → mesh) | ❌ Needs real camera translation and sharp frames. A casual pan gives near-zero parallax; feature matching dies on motion blur. Minutes of compute, native tooling, frequent hard failures. |
 | Gaussian splatting (incl. WebGPU trainers like Brush) | ❌ Same capture requirements as SfM (it needs COLMAP-style poses first), plus minutes of GPU training. Beautiful when it works; wrong fit for "quick capture, always works". |
 | Hosted APIs (Luma, Polycam…) | ❌ Not self-contained: accounts, uploads, cost, privacy. |
-| Stereo from video parallax | ❌ Only works when the clip happens to translate; a pan (like the test clip) produces nothing. |
-| **Monocular depth → displaced surface ("3D photo")** | ✅ Works from a *single frame*, so any clip or even a still qualifies. Runs in-browser in ~1s. Lo-fi by nature but very recognizable — the iOS "spatial photo" / old Facebook 3D-photo trick. |
+| **Two-view triangulation from video parallax** | ✅ **(primary)** When the clip translates even slightly, tracked parallax triangulates real, measured 3D — no model, no downloads, and it's *your footage's* geometry. Fails informatively on pans. |
+| **Monocular depth → displaced surface ("3D photo")** | ✅ **(fallback + comparison)** Works from a *single frame*, so pans and stills still produce something. Can be badly wrong on unusual scenes — that's why it's not primary. |
 
 Validation: MiDaS-small (ONNX) on the sharpest frame of the test clip produced
 a clean relief (floor near, wall far, rocking chair popping out), and
 re-projected novel views showed convincing parallax despite the blur and low
 resolution. This is the approach `/moments` ships.
 
-## Pipeline (all client-side)
+## Measured depth pipeline (`src/lib/moments/parallax/`)
+
+Runs entirely in the page, no wasm, no downloads (~4–7s for a few-second
+clip):
+
+1. **Partner scouting** — the sharpest frame is the reference; a handful of
+   candidate partners (immediate neighbors ±1/±2/±4 plus frames spread
+   across the clip) are coarsely tracked and the one with the most residual
+   parallax wins. Near neighbors matter: on blurry handheld footage only
+   frames ~0.1–0.3s apart may track at all.
+2. **Tracking** (`lk.ts`) — pyramidal Lucas–Kanade on a 6px grid with a
+   forward-backward consistency gate. Every surviving track is a real
+   observation of scene motion between the two frames.
+3. **Pan detection** (`twoview.ts`) — RANSAC homography absorbs camera
+   rotation/dominant plane; the residuals are the true parallax. Median
+   residual < 1.2px ⇒ "no-parallax" (a pan/static shot) and the app falls
+   back to AI depth, telling the user why.
+4. **Two-view geometry** (`twoview.ts`) — 8-point essential matrix under
+   RANSAC (Sampson gating), pose recovery via cheirality voting over the
+   four (R,t) candidates, then midpoint triangulation of every inlier
+   track. Small dense linear algebra (Jacobi eigen / 3×3 SVD) lives in
+   `linalg.ts`.
+5. **Densification** (`densify.ts`) — the sparse measured inverse depths
+   are spread across the frame by color-edge-aware Jacobi relaxation
+   (measurements are hard constraints; depth flows in smooth regions and
+   stops at image edges). Output is the same `DepthMap` the viewer already
+   consumes.
+
+The "Nerd stats" panel in the UI shows the raw material: track vectors
+colored by parallax, the measured depth map, the AI map beside it, and the
+numbers (track count, pose inliers, median parallax px, % triangulated).
+
+Moving subjects (people, pets — or a blink mid-clip) violate the
+static-scene assumption. The epipolar RANSAC treats them as outliers, so
+they get no measured depth and inherit propagated surroundings; the frame
+strip lets you pick which instant (eyes open/closed) becomes the moment.
+That failure mode is intentionally visible in the playground — it's half
+the fun.
+
+## AI fallback pipeline (all client-side)
 
 1. **Capture** — `<input type="file" accept="video/*,image/*">`; on phones
    this offers the camera directly. Stills are accepted too.

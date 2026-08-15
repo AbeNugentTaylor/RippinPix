@@ -21,8 +21,11 @@ const MAX_FRAME_DIM = 1024;
 // Sharpness is scored on a small grayscale copy; blur is a low-frequency
 // property so this loses nothing and keeps scoring cheap.
 const SCORE_WIDTH = 128;
-const SAMPLES_PER_SECOND = 4;
-const MAX_SAMPLES = 24;
+// Dense enough that neighboring samples are ~0.12s apart: the measured-depth
+// tracker needs a partner frame close to the reference when the clip is
+// blurry, and handheld blur comes and goes on that timescale.
+const SAMPLES_PER_SECOND = 8;
+const MAX_SAMPLES = 40;
 
 export function isVideoFile(file: File): boolean {
   return file.type.startsWith("video/") || /\.(mov|mp4|webm|m4v)$/i.test(file.name);

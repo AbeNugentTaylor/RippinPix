@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import MomentViewer, { type ViewerMode } from "./MomentViewer";
+import DiagnosticsPanel from "./DiagnosticsPanel";
 import {
   extractFrames,
   frameFromImage,
@@ -9,8 +10,10 @@ import {
   type FrameCandidate,
 } from "@/lib/moments/frame-extract";
 import { estimateDepth, preloadDepthModel, type DepthMap } from "@/lib/moments/depth";
+import { measureDepthFromVideo, type MeasuredDepthResult } from "@/lib/moments/parallax";
 
 type Stage = "idle" | "working" | "view";
+type DepthSource = "measured" | "ai";
 
 interface Progress {
   message: string;
@@ -38,76 +41,136 @@ export default function MomentsApp() {
   const [stage, setStage] = useState<Stage>("idle");
   const [progress, setProgress] = useState<Progress>({ message: "", fraction: null });
   const [error, setError] = useState<string | null>(null);
+  const [allFrames, setAllFrames] = useState<FrameCandidate[]>([]);
   const [strip, setStrip] = useState<FrameCandidate[]>([]);
   const [frame, setFrame] = useState<HTMLCanvasElement | null>(null);
-  const [depthMap, setDepthMap] = useState<DepthMap | null>(null);
+  const [measured, setMeasured] = useState<MeasuredDepthResult | null>(null);
+  const [aiDepth, setAiDepth] = useState<DepthMap | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [source, setSource] = useState<DepthSource>("measured");
   const [mode, setMode] = useState<ViewerMode>("photo");
   const [relief, setRelief] = useState(0.8);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Guards against a stale async run clobbering a newer capture.
   const runId = useRef(0);
 
-  const runDepth = useCallback(async (candidate: FrameCandidate, id: number) => {
-    setStage("working");
-    setProgress({ message: "Estimating depth", fraction: null });
-    try {
-      const depth = await estimateDepth(candidate.canvas, (message, fraction) => {
+  /**
+   * Run both depth paths for a chosen reference frame: measured parallax from
+   * the footage (primary) and the AI estimate (comparison + fallback). The
+   * viewer opens as soon as either one lands.
+   */
+  const processReference = useCallback(
+    async (frames: FrameCandidate[], candidate: FrameCandidate, id: number) => {
+      setStage("working");
+      setMeasured(null);
+      setAiDepth(null);
+      setAiError(null);
+
+      // AI depth runs concurrently; it must never block a successful measured
+      // capture (e.g. offline after a failed model download).
+      const aiPromise = estimateDepth(candidate.canvas, (message, fraction) => {
         if (runId.current === id) setProgress({ message, fraction });
-      });
+      }).then(
+        (d) => {
+          if (runId.current === id) setAiDepth(d);
+          return d;
+        },
+        (err: unknown) => {
+          if (runId.current === id)
+            setAiError(err instanceof Error ? err.message : "AI depth failed.");
+          return null;
+        }
+      );
+
+      let measuredResult: MeasuredDepthResult | null = null;
+      if (frames.length > 1) {
+        const refIndex = frames.indexOf(
+          frames.find((f) => f.canvas === candidate.canvas) ?? candidate
+        );
+        try {
+          measuredResult = await measureDepthFromVideo(frames, refIndex, (message, fraction) => {
+            if (runId.current === id) setProgress({ message, fraction });
+          });
+        } catch (err) {
+          console.error("measured-depth pipeline failed", err);
+          measuredResult = { status: "too-few-tracks", trackCount: 0 };
+        }
+      }
       if (runId.current !== id) return;
-      setFrame(candidate.canvas);
-      setDepthMap(depth);
-      setStage("view");
-    } catch (err) {
+      setMeasured(measuredResult);
+
+      if (measuredResult?.status === "ok") {
+        setFrame(candidate.canvas);
+        setSource("measured");
+        setStage("view");
+        return;
+      }
+      // No measured depth — wait for the AI path.
+      setProgress({ message: "Estimating depth with AI", fraction: null });
+      const ai = await aiPromise;
       if (runId.current !== id) return;
-      setError(err instanceof Error ? err.message : "Depth estimation failed.");
-      setStage("idle");
-    }
-  }, []);
+      if (ai) {
+        setFrame(candidate.canvas);
+        setSource("ai");
+        setStage("view");
+      } else {
+        setError(
+          frames.length > 1
+            ? "Couldn't measure parallax in this clip, and the AI fallback failed too."
+            : "Depth estimation failed."
+        );
+        setStage("idle");
+      }
+    },
+    []
+  );
 
   const onFile = useCallback(
     async (file: File) => {
       const id = ++runId.current;
       setError(null);
       setFrame(null);
-      setDepthMap(null);
       setStage("working");
       // Model download (first visit only) overlaps with frame extraction.
       preloadDepthModel((message, fraction) => {
         if (runId.current === id) setProgress({ message, fraction });
       });
       try {
-        let candidates: FrameCandidate[];
+        let frames: FrameCandidate[];
         if (isVideoFile(file)) {
           setProgress({ message: "Reading video frames", fraction: null });
-          const frames = await extractFrames(file, (done, total) => {
+          frames = await extractFrames(file, (done, total) => {
             if (runId.current === id)
               setProgress({ message: "Reading video frames", fraction: done / total });
           });
-          const duration = frames[frames.length - 1].time;
-          candidates = pickStrip(frames, Math.max(duration, 0.001));
         } else {
-          candidates = [await frameFromImage(file)];
+          frames = [await frameFromImage(file)];
         }
         if (runId.current !== id) return;
-        setStrip(candidates);
-        const sharpest = candidates.reduce((a, b) => (b.sharpness > a.sharpness ? b : a));
-        await runDepth(sharpest, id);
+        setAllFrames(frames);
+        const duration = frames[frames.length - 1].time;
+        setStrip(frames.length > 1 ? pickStrip(frames, Math.max(duration, 0.001)) : []);
+        const sharpest = frames.reduce((a, b) => (b.sharpness > a.sharpness ? b : a));
+        await processReference(frames, sharpest, id);
       } catch (err) {
         if (runId.current !== id) return;
         setError(err instanceof Error ? err.message : "Couldn't read that file.");
         setStage("idle");
       }
     },
-    [runDepth]
+    [processReference]
   );
 
   const reset = useCallback(() => {
     runId.current++;
     setStage("idle");
+    setAllFrames([]);
     setStrip([]);
     setFrame(null);
-    setDepthMap(null);
+    setMeasured(null);
+    setAiDepth(null);
+    setAiError(null);
     setError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
@@ -120,11 +183,14 @@ export default function MomentsApp() {
     D.requestPermission?.().catch(() => {});
   }, []);
 
+  const measuredDepth = measured?.status === "ok" ? measured.depth : null;
+  const activeDepth = source === "measured" ? measuredDepth : aiDepth;
+
   return (
     <main className="moments-root">
       <header className="moments-header">
         <h1>3D Moments</h1>
-        <p>Shoot a quick clip or photo — get a lo-fi 3D memory you can peer around.</p>
+        <p>Shoot a quick clip — the parallax in your own footage becomes real 3D.</p>
       </header>
 
       {stage !== "view" && (
@@ -156,7 +222,10 @@ export default function MomentsApp() {
             ) : (
               <span className="moments-drop-hint">
                 Tap to record or pick a video / photo
-                <small>Everything runs on your device — nothing is uploaded.</small>
+                <small>
+                  Move the camera <em>sideways</em> a little while you shoot — that motion is the
+                  3D. Everything runs on your device.
+                </small>
               </span>
             )}
           </label>
@@ -164,11 +233,37 @@ export default function MomentsApp() {
         </section>
       )}
 
-      {stage === "view" && frame && depthMap && (
+      {stage === "view" && frame && activeDepth && (
         <section className="moments-stage">
-          <MomentViewer frame={frame} depth={depthMap} mode={mode} relief={relief} />
+          <MomentViewer frame={frame} depth={activeDepth} mode={mode} relief={relief} />
           <div className="moments-controls">
             <div className="moments-buttons">
+              <span className="moments-group-label">Depth</span>
+              <button
+                type="button"
+                data-active={source === "measured" || undefined}
+                disabled={!measuredDepth}
+                title={
+                  measuredDepth
+                    ? "Triangulated from your footage's parallax"
+                    : measured?.status === "no-parallax"
+                      ? "No usable parallax in this clip (pan or static shot)"
+                      : "Needs a video with sideways motion"
+                }
+                onClick={() => setSource("measured")}
+              >
+                Footage
+              </button>
+              <button
+                type="button"
+                data-active={source === "ai" || undefined}
+                disabled={!aiDepth}
+                title={aiError ?? "Single-frame AI depth estimate"}
+                onClick={() => setSource("ai")}
+              >
+                AI
+              </button>
+              <span className="moments-group-label">View</span>
               <button
                 type="button"
                 data-active={mode === "photo" || undefined}
@@ -182,6 +277,13 @@ export default function MomentsApp() {
                 onClick={() => setMode("particles")}
               >
                 Particles
+              </button>
+              <button
+                type="button"
+                data-active={showDiagnostics || undefined}
+                onClick={() => setShowDiagnostics((v) => !v)}
+              >
+                Nerd stats
               </button>
               <button type="button" onClick={enableTilt}>
                 Enable tilt
@@ -209,13 +311,22 @@ export default function MomentsApp() {
                     type="button"
                     data-active={c.canvas === frame || undefined}
                     onClick={() => {
-                      if (c.canvas !== frame) runDepth(c, ++runId.current);
+                      if (c.canvas !== frame) processReference(allFrames, c, ++runId.current);
                     }}
                   >
                     <StripThumb candidate={c} />
                   </button>
                 ))}
               </div>
+            )}
+            {showDiagnostics && (
+              <DiagnosticsPanel
+                frame={frame}
+                measured={measured}
+                aiDepth={aiDepth}
+                aiError={aiError}
+                allFrames={allFrames}
+              />
             )}
           </div>
         </section>
