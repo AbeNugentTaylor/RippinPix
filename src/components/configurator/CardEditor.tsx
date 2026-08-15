@@ -22,10 +22,10 @@ import CropEditor from "./CropEditor";
 import LightingDebugPanel from "./LightingDebugPanel";
 import type { Entry } from "./FolderBrowser";
 import type { UploadImage } from "./PhotoPicker";
-import { DESIGNS, POOLS } from "@/lib/designs";
+import { PER_PACK, poolsFor } from "@/lib/designs";
 import { firstEmptySlot, configKey } from "@/lib/card-key";
 import { photoSrc } from "@/lib/photo-src";
-import type { Attribute, Card as CardT, CardConfig, CardOrientation, Crop, HoloPattern, Rarity } from "@/lib/types";
+import type { Attribute, Card as CardT, CardConfig, CardOrientation, Crop, Design, HoloPattern, Rarity } from "@/lib/types";
 
 export type EditorTarget =
   | { kind: "new"; image: Entry }
@@ -69,21 +69,39 @@ function defaultOverridesFor(rarity: Rarity, holo: boolean): Card3DOverrides {
 interface CardEditorProps {
   target: EditorTarget;
   configs: Record<string, CardConfig>;
+  // The current category list, fetched by ConfiguratorApp — not the
+  // build-time DESIGNS snapshot, so freshly added categories are editable.
+  designs: Design[];
+  // Pre-targeted slot (tapping an empty slot on the category board).
+  initial?: { designId: string; local: number } | null;
   onSaved: () => void;
+  // Only meaningful for kind "edit": the saved card was deleted.
+  onDeleted?: () => void;
   onClose: () => void;
   remote?: boolean;
 }
 
-function slotFor(designId: string, configs: Record<string, CardConfig>): number {
-  const design = DESIGNS.find((d) => d.id === designId) ?? DESIGNS[0];
-  return firstEmptySlot(designId, design.packs * 8, configs) ?? 1;
+function slotFor(designId: string, designs: Design[], configs: Record<string, CardConfig>): number {
+  const design = designs.find((d) => d.id === designId) ?? designs[0];
+  return firstEmptySlot(designId, (design?.packs ?? 1) * PER_PACK, configs) ?? 1;
 }
 
-export default function CardEditor({ target, configs, onSaved, onClose, remote = false }: CardEditorProps) {
+export default function CardEditor({
+  target,
+  configs,
+  designs,
+  initial = null,
+  onSaved,
+  onDeleted,
+  onClose,
+  remote = false,
+}: CardEditorProps) {
   const editingConfig = target.kind === "edit" ? configs[target.key] : null;
 
-  const [designId, setDesignId] = useState(() => editingConfig?.designId ?? DESIGNS[0].id);
-  const [local, setLocal] = useState(() => editingConfig?.local ?? slotFor(DESIGNS[0].id, configs));
+  const [designId, setDesignId] = useState(() => editingConfig?.designId ?? initial?.designId ?? designs[0]?.id ?? "");
+  const [local, setLocal] = useState(
+    () => editingConfig?.local ?? initial?.local ?? slotFor(initial?.designId ?? designs[0]?.id ?? "", designs, configs)
+  );
   const [crop, setCrop] = useState<Crop>(() => editingConfig?.crop ?? { x: 50, y: 50, zoom: 1 });
   const [rarity, setRarity] = useState<Rarity>(() => editingConfig?.rarity ?? "common");
   const [holo, setHolo] = useState(() => editingConfig?.holo ?? false);
@@ -94,15 +112,18 @@ export default function CardEditor({ target, configs, onSaved, onClose, remote =
   const [date, setDate] = useState(() => editingConfig?.date ?? "");
   const [medium, setMedium] = useState(() => editingConfig?.medium ?? "");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [overrides, setOverrides] = useState<Card3DOverrides>(() =>
     defaultOverridesFor(editingConfig?.rarity ?? "common", editingConfig?.holo ?? false)
   );
 
-  const design = DESIGNS.find((d) => d.id === designId) ?? DESIGNS[0];
-  const totalSlots = design.packs * 8;
-  const placeholder = POOLS[designId]?.[local - 1];
+  const pools = useMemo(() => poolsFor(designs), [designs]);
+  const design = designs.find((d) => d.id === designId) ?? designs[0];
+  const totalSlots = (design?.packs ?? 1) * PER_PACK;
+  const placeholder = pools[designId]?.[local - 1];
   const occupyingKey = configKey(designId, local);
   const occupiedBySelf = target.kind === "edit" && target.key === occupyingKey;
   const existing = occupiedBySelf ? undefined : configs[occupyingKey];
@@ -125,7 +146,7 @@ export default function CardEditor({ target, configs, onSaved, onClose, remote =
 
   const handleDesignChange = (id: string) => {
     setDesignId(id);
-    setLocal(slotFor(id, configs));
+    setLocal(slotFor(id, designs, configs));
   };
 
   const setRarityAndHolo = (r: Rarity) => {
@@ -154,8 +175,8 @@ export default function CardEditor({ target, configs, onSaved, onClose, remote =
       plate: String(local).padStart(3, "0"),
       tilt: 0,
       tag: "#7de08a",
-      tier: design.name,
-      ink: design.ink,
+      tier: design?.name ?? designId,
+      ink: design?.ink ?? "#3a3634",
       title: title || placeholder?.title || "Untitled",
       date: date || placeholder?.date || "",
       medium: medium || placeholder?.medium || "",
@@ -249,6 +270,27 @@ export default function CardEditor({ target, configs, onSaved, onClose, remote =
     }
   };
 
+  const handleDelete = async () => {
+    if (target.kind !== "edit") return;
+    setDeleting(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/card-config?key=${encodeURIComponent(target.key)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage(data.error ?? "Delete failed");
+        setConfirmingDelete(false);
+        return;
+      }
+      onDeleted?.();
+    } catch {
+      setMessage("Delete failed");
+      setConfirmingDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (target.kind === "edit" && !editingConfig) {
     return (
       <div className="cfg-panel cfg-editor">
@@ -322,7 +364,7 @@ export default function CardEditor({ target, configs, onSaved, onClose, remote =
           <label className="cfg-field">
             Series
             <select value={designId} onChange={(e) => handleDesignChange(e.target.value)}>
-              {DESIGNS.map((d) => (
+              {designs.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
                 </option>
@@ -436,9 +478,32 @@ export default function CardEditor({ target, configs, onSaved, onClose, remote =
             </button>
           </div>
 
-          <button className="cfg-save-btn" onClick={handleSave} disabled={saving}>
+          <button className="cfg-save-btn" onClick={handleSave} disabled={saving || deleting}>
             {saving ? "Saving…" : "Save card"}
           </button>
+          {target.kind === "edit" &&
+            (confirmingDelete ? (
+              <div className="cfg-git-confirm">
+                <p>Remove this card? The slot goes back to a placeholder.</p>
+                <div className="cfg-git-confirm-actions">
+                  <button type="button" className="cfg-save-btn cfg-delete-btn" onClick={handleDelete} disabled={deleting}>
+                    {deleting ? "Removing…" : "Yes, remove it"}
+                  </button>
+                  <button type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+                    Keep it
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="cfg-delete-link"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={saving || deleting}
+              >
+                Remove this card…
+              </button>
+            ))}
           {message && <p className="cfg-message">{message}</p>}
         </div>
       </div>

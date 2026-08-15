@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
-import { DESIGNS } from "@/lib/designs";
 import { configKey, deleteCardConfig, getCardConfigs, saveCardConfig, CARD_CONFIGS_REL_PATH } from "@/lib/card-configs.server";
+import { getDesigns } from "@/lib/design-configs.server";
+import { getDesignsRemote } from "@/lib/design-configs.remote.server";
 import { getCardConfigsRemote } from "@/lib/card-configs.remote.server";
 import { firstEmptySlot } from "@/lib/card-key";
 import { describeReadError } from "@/lib/cloud-file.server";
@@ -117,7 +118,16 @@ export async function POST(request: NextRequest) {
 
   const { body, uploadFile } = await parseBody(request);
 
-  const design = DESIGNS.find((d) => d.id === body.designId);
+  // Look the design up in the *current* designs file (staging branch in
+  // remote mode), not the build-time DESIGNS snapshot — a category added via
+  // the configurator must accept card saves before it has ever been published.
+  let design;
+  try {
+    const designs = isRemoteBackend() ? await getDesignsRemote() : getDesigns();
+    design = designs.find((d) => d.id === body.designId);
+  } catch (err) {
+    return NextResponse.json({ error: `Could not read categories: ${(err as Error).message}` }, { status: 502 });
+  }
   if (!design) return NextResponse.json({ error: "Unknown design" }, { status: 400 });
   if (!RARITIES.includes(body.rarity)) {
     return NextResponse.json({ error: "Invalid rarity" }, { status: 400 });

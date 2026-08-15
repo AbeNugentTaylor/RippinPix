@@ -18,7 +18,7 @@ import { isRemoteModeEnabled } from "@/lib/remote-mode.server";
 // edit here can't silently become the *only* thing standing between the
 // public internet and these routes.
 export const config = {
-  matcher: ["/configurator/:path*", "/api/card-config/:path*"],
+  matcher: ["/configurator/:path*", "/api/card-config/:path*", "/api/designs/:path*"],
 };
 
 function unauthorized(): NextResponse {
