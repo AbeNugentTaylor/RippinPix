@@ -206,25 +206,6 @@
     "medium": "Film - Unknown Stock",
     "updatedAt": "2026-08-08T13:20:33.298Z"
   },
-  "leaks/1": {
-    "designId": "leaks",
-    "local": 1,
-    "fileName": "01.jpg",
-    "sourcePath": "C:\\Users\\abenu\\OneDrive\\Pictures\\Lightroom Saved Photos\\Cards\\Image52.jpg",
-    "crop": {
-      "x": 63.13132455088358,
-      "y": 48.19208996344744,
-      "zoom": 1
-    },
-    "rarity": "common",
-    "holo": false,
-    "holoPattern": "none",
-    "attributes": [],
-    "title": "Surfin' Santa Sellin' Smallclocks",
-    "date": "2025",
-    "medium": "Film - Unknown Stock",
-    "updatedAt": "2026-08-08T13:22:53.919Z"
-  },
   "weihn/4": {
     "designId": "weihn",
     "local": 4,
