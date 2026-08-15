@@ -178,18 +178,6 @@
     ]
   },
   {
-    "id": "animals",
-    "name": "Animals",
-    "packs": 2,
-    "stock": "#d8c9a8",
-    "foil": "#4a3517",
-    "ink": "#5b431f",
-    "art": [
-      "Animals",
-      "who",
-      "moved"
-    ],
-    "sub": "none of them held still",
     "subjects": [
       "Neighbour's cat",
       "Heron",
@@ -211,7 +199,17 @@
       "too close",
       "at first light",
       "unimpressed"
-    ]
+    ],
+    "id": "animals",
+    "name": "Animals",
+    "packs": 2,
+    "stock": "#d8c9a8",
+    "foil": "#4a3517",
+    "ink": "#5b431f",
+    "art": [
+      "critter box"
+    ],
+    "sub": "none of them held still"
   },
   {
     "id": "nature",
