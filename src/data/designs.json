@@ -248,19 +248,6 @@
     ]
   },
   {
-    "id": "austin",
-    "name": "Austin TX",
-    "packs": 2,
-    "limited": true,
-    "stock": "#f6e05a",
-    "foil": "#8a6a00",
-    "ink": "#6f5500",
-    "art": [
-      "Austin",
-      "Texas",
-      "run"
-    ],
-    "sub": "limited run",
     "subjects": [
       "Congress bridge",
       "Neon on 6th",
@@ -282,7 +269,19 @@
       "at closing time",
       "midday",
       "with the AC off"
-    ]
+    ],
+    "id": "austin",
+    "name": "Austin TX",
+    "packs": 2,
+    "stock": "#be38f3",
+    "foil": "#74a7ff",
+    "ink": "#000000",
+    "art": [
+      "It’s",
+      "Austin"
+    ],
+    "sub": "limited run",
+    "limited": true
   },
   {
     "id": "weihn",
